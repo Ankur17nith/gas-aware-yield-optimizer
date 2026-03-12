@@ -1,0 +1,36 @@
+{
+  "name": "yield-optimizer",
+  "version": "1.0.0",
+  "description": "Gas-Aware Stablecoin Yield Optimizer — maximize DeFi yield after gas costs",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network mainnet",
+    "verify": "hardhat run scripts/verify.ts --network mainnet",
+    "node": "hardhat node",
+    "clean": "hardhat clean"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.10",
+    "@nomicfoundation/hardhat-ethers": "^3.0.5",
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.3",
+    "@typechain/hardhat": "^9.1.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "hardhat": "^2.19.4",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.5",
+    "chai": "^4.3.10",
+    "ethers": "^6.9.2",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

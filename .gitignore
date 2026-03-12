@@ -1,0 +1,37 @@
+# Byte-compiled
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# ML models
+backend/models/*.pkl
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Hardhat
+cache/
+artifacts/
+typechain-types/
+
+# Build
+frontend/dist/
+build/
+
+# Environment
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
