@@ -4,13 +4,17 @@ yield_predictor.py
 Uses the trained model to predict 30-day forward APY for each pool.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 from ai_engine.feature_engineering import build_features
 
 
 def predict_yields(
-    model, pool_data: list[dict], historical: list[dict]
-) -> list[dict]:
+    model: Any, pool_data: list[dict[str, Any]], historical: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """
     Predict 30-day forward APY for each pool.
     Returns list of predictions with confidence intervals.
@@ -18,11 +22,11 @@ def predict_yields(
     if model is None:
         return _fallback_predictions(pool_data)
 
-    features_list = build_features(pool_data, historical)
+    features_list: list[dict[str, Any]] = build_features(pool_data, historical)
 
-    predictions = []
+    predictions: list[dict[str, Any]] = []
     for feat in features_list:
-        fv = feat["feature_vector"]
+        fv: list[float] = feat["feature_vector"]
         X = np.array([fv], dtype=np.float64)
 
         try:
@@ -30,8 +34,8 @@ def predict_yields(
             predicted_apy = max(predicted_apy, 0.01)
 
             # Estimate confidence based on data quality
-            data_points = feat["features"]["data_points"]
-            std_apy = feat["features"]["std_apy"]
+            data_points: int = int(feat["features"]["data_points"])
+            std_apy: float = float(feat["features"]["std_apy"])
 
             if data_points >= 20:
                 confidence = "high"
@@ -82,7 +86,7 @@ def predict_yields(
     return predictions
 
 
-def _fallback_predictions(pool_data: list[dict]) -> list[dict]:
+def _fallback_predictions(pool_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Simple fallback when no model is available."""
     return [
         {

@@ -5,10 +5,14 @@ Transforms raw historical pool data into feature vectors for the
 yield prediction model.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 
 
-def build_features(pool_data: list[dict], historical: list[dict]) -> list[dict]:
+def build_features(pool_data: list[dict[str, Any]], historical: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     For each pool, extract features from its historical data:
     - mean APY over the window
@@ -18,7 +22,7 @@ def build_features(pool_data: list[dict], historical: list[dict]) -> list[dict]:
     - TVL ratio vs mean
     - momentum (last 7d vs last 30d)
     """
-    features_list = []
+    features_list: list[dict[str, Any]] = []
 
     for pool in pool_data:
         pool_id = pool.get("pool_id", "")

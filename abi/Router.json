@@ -7,23 +7,24 @@
       "stateMutability": "nonpayable",
       "type": "constructor"
     },
+    { "inputs": [], "name": "OnlyOwner", "type": "error" },
+    { "inputs": [], "name": "Paused", "type": "error" },
+    { "inputs": [], "name": "Reentrancy", "type": "error" },
     { "inputs": [], "name": "ZeroAddress", "type": "error" },
     { "inputs": [], "name": "ZeroAmount", "type": "error" },
-    { "inputs": [], "name": "TokenNotSupported", "type": "error" },
+    { "inputs": [], "name": "UnsupportedToken", "type": "error" },
     { "inputs": [], "name": "AdapterNotSet", "type": "error" },
     { "inputs": [], "name": "SameProtocol", "type": "error" },
-    { "inputs": [], "name": "ContractPaused", "type": "error" },
-    { "inputs": [], "name": "NotOwner", "type": "error" },
-    { "inputs": [], "name": "FeeTooHigh", "type": "error" },
-    { "inputs": [], "name": "ReentrancyGuard", "type": "error" },
     { "inputs": [], "name": "SlippageExceeded", "type": "error" },
+    { "inputs": [], "name": "FeeTooHigh", "type": "error" },
+    { "inputs": [], "name": "WithdrawFailed", "type": "error" },
     {
       "anonymous": false,
       "inputs": [
         { "indexed": true, "internalType": "address", "name": "user", "type": "address" },
-        { "indexed": true, "internalType": "address", "name": "token", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" },
-        { "indexed": false, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" }
+        { "indexed": true, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
+        { "indexed": false, "internalType": "address", "name": "token", "type": "address" },
+        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
       ],
       "name": "Deposited",
       "type": "event"
@@ -32,9 +33,9 @@
       "anonymous": false,
       "inputs": [
         { "indexed": true, "internalType": "address", "name": "user", "type": "address" },
-        { "indexed": true, "internalType": "address", "name": "token", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" },
-        { "indexed": false, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" }
+        { "indexed": true, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
+        { "indexed": false, "internalType": "address", "name": "token", "type": "address" },
+        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
       ],
       "name": "Withdrawn",
       "type": "event"
@@ -43,12 +44,21 @@
       "anonymous": false,
       "inputs": [
         { "indexed": true, "internalType": "address", "name": "user", "type": "address" },
-        { "indexed": true, "internalType": "address", "name": "token", "type": "address" },
-        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" },
         { "indexed": false, "internalType": "enum Router.Protocol", "name": "fromProtocol", "type": "uint8" },
-        { "indexed": false, "internalType": "enum Router.Protocol", "name": "toProtocol", "type": "uint8" }
+        { "indexed": false, "internalType": "enum Router.Protocol", "name": "toProtocol", "type": "uint8" },
+        { "indexed": false, "internalType": "address", "name": "token", "type": "address" },
+        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
       ],
       "name": "Migrated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
+        { "indexed": false, "internalType": "address", "name": "adapter", "type": "address" }
+      ],
+      "name": "AdapterUpdated",
       "type": "event"
     },
     {
@@ -57,23 +67,57 @@
         { "indexed": true, "internalType": "address", "name": "token", "type": "address" },
         { "indexed": false, "internalType": "bool", "name": "status", "type": "bool" }
       ],
-      "name": "TokenWhitelistUpdated",
+      "name": "TokenWhitelisted",
       "type": "event"
     },
     {
       "anonymous": false,
       "inputs": [
-        { "indexed": false, "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
-        { "indexed": true, "internalType": "address", "name": "adapter", "type": "address" }
+        { "indexed": false, "internalType": "uint256", "name": "newFeeBps", "type": "uint256" }
       ],
-      "name": "AdapterUpdated",
+      "name": "FeeUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": false, "internalType": "address", "name": "recipient", "type": "address" }
+      ],
+      "name": "FeeRecipientUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": false, "internalType": "address", "name": "token", "type": "address" },
+        { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }
+      ],
+      "name": "FeesCollected",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": false, "internalType": "bool", "name": "paused", "type": "bool" }
+      ],
+      "name": "EmergencyPauseToggled",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        { "indexed": true, "internalType": "address", "name": "oldOwner", "type": "address" },
+        { "indexed": true, "internalType": "address", "name": "newOwner", "type": "address" }
+      ],
+      "name": "OwnershipTransferred",
       "type": "event"
     },
     {
       "inputs": [
+        { "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
         { "internalType": "address", "name": "token", "type": "address" },
         { "internalType": "uint256", "name": "amount", "type": "uint256" },
-        { "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" }
+        { "internalType": "bytes", "name": "extraData", "type": "bytes" }
       ],
       "name": "deposit",
       "outputs": [],
@@ -82,9 +126,10 @@
     },
     {
       "inputs": [
+        { "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" },
         { "internalType": "address", "name": "token", "type": "address" },
         { "internalType": "uint256", "name": "amount", "type": "uint256" },
-        { "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" }
+        { "internalType": "bytes", "name": "extraData", "type": "bytes" }
       ],
       "name": "withdraw",
       "outputs": [],
@@ -95,11 +140,12 @@
       "inputs": [
         {
           "components": [
-            { "internalType": "address", "name": "token", "type": "address" },
-            { "internalType": "uint256", "name": "amount", "type": "uint256" },
             { "internalType": "enum Router.Protocol", "name": "fromProtocol", "type": "uint8" },
             { "internalType": "enum Router.Protocol", "name": "toProtocol", "type": "uint8" },
-            { "internalType": "uint256", "name": "minReceived", "type": "uint256" }
+            { "internalType": "address", "name": "token", "type": "address" },
+            { "internalType": "uint256", "name": "amount", "type": "uint256" },
+            { "internalType": "uint256", "name": "minReceived", "type": "uint256" },
+            { "internalType": "bytes", "name": "extraData", "type": "bytes" }
           ],
           "internalType": "struct Router.MigrationParams",
           "name": "params",
@@ -126,16 +172,34 @@
         { "internalType": "address", "name": "token", "type": "address" },
         { "internalType": "bool", "name": "status", "type": "bool" }
       ],
-      "name": "setTokenWhitelist",
+      "name": "setTokenSupport",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
     },
     {
       "inputs": [
-        { "internalType": "uint256", "name": "newFeeBps", "type": "uint256" }
+        { "internalType": "uint256", "name": "_feeBps", "type": "uint256" }
       ],
-      "name": "setFeeBps",
+      "name": "setFee",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "address", "name": "_recipient", "type": "address" }
+      ],
+      "name": "setFeeRecipient",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "address", "name": "token", "type": "address" }
+      ],
+      "name": "collectFees",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -185,6 +249,15 @@
     },
     {
       "inputs": [],
+      "name": "MAX_FEE_BPS",
+      "outputs": [
+        { "internalType": "uint256", "name": "", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
       "name": "paused",
       "outputs": [
         { "internalType": "bool", "name": "", "type": "bool" }
@@ -205,9 +278,51 @@
     },
     {
       "inputs": [
+        { "internalType": "uint256", "name": "", "type": "uint256" }
+      ],
+      "name": "tokenList",
+      "outputs": [
+        { "internalType": "address", "name": "", "type": "address" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "address", "name": "", "type": "address" }
+      ],
+      "name": "accruedFees",
+      "outputs": [
+        { "internalType": "uint256", "name": "", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
         { "internalType": "enum Router.Protocol", "name": "", "type": "uint8" }
       ],
       "name": "adapters",
+      "outputs": [
+        { "internalType": "address", "name": "", "type": "address" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "getSupportedTokens",
+      "outputs": [
+        { "internalType": "address[]", "name": "", "type": "address[]" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        { "internalType": "enum Router.Protocol", "name": "protocol", "type": "uint8" }
+      ],
+      "name": "getAdapter",
       "outputs": [
         { "internalType": "address", "name": "", "type": "address" }
       ],
