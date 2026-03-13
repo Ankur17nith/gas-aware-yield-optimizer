@@ -6,8 +6,41 @@ interface Props {
   pools: Pool[];
 }
 
+function parsePoolIdName(poolId: string | undefined): string {
+  if (!poolId) return '';
+  const tail = poolId.includes(':') ? poolId.split(':').pop() || '' : poolId;
+  const cleaned = tail.trim();
+  if (!cleaned) return '';
+
+  // Skip raw addresses and UUID-like IDs.
+  const isAddress = /^0x[a-fA-F0-9]{40}$/.test(cleaned);
+  const isUuid = /^[a-f0-9-]{24,}$/i.test(cleaned);
+  if (isAddress || isUuid) return '';
+
+  return cleaned;
+}
+
+function getPoolName(pool: Pool): string {
+  const meta = (pool.pool_meta || '').trim();
+  if (meta) return meta;
+
+  const parsed = parsePoolIdName(pool.pool_id);
+  if (parsed) return parsed;
+
+  const symbol = (pool.symbol || pool.token || '').trim();
+  return `${pool.protocol} ${symbol} pool`.trim();
+}
+
 export default function Leaderboard({ pools }: Props) {
-  const sorted = [...pools]
+  const uniquePools = Object.values(
+    pools.reduce<Record<string, Pool>>((acc, pool) => {
+      const id = pool.pool_id || `${pool.protocol}-${pool.token}-${pool.chain}-${pool.pool_meta || ''}`;
+      acc[id] = pool;
+      return acc;
+    }, {})
+  );
+
+  const sorted = [...uniquePools]
     .sort((a, b) => (b.net_apy ?? b.apy ?? 0) - (a.net_apy ?? a.apy ?? 0))
     .slice(0, 10);
 
@@ -26,6 +59,7 @@ export default function Leaderboard({ pools }: Props) {
             </span>
             <div style={styles.poolInfo}>
               <span style={styles.poolName}>{pool.protocol}</span>
+              <span style={styles.poolSubtitle}>{getPoolName(pool)}</span>
               <span style={styles.poolToken}>{pool.token}</span>
             </div>
             <div style={styles.stats}>
@@ -77,6 +111,15 @@ const styles: Record<string, React.CSSProperties> = {
   rank: { fontSize: 16, width: 32, textAlign: 'center', flexShrink: 0 },
   poolInfo: { flex: 1, minWidth: 0 },
   poolName: { display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-1)' },
+  poolSubtitle: {
+    display: 'block',
+    fontSize: 12,
+    color: 'var(--text-2)',
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
   poolToken: { display: 'block', fontSize: 11, color: 'var(--primary)' },
   stats: { textAlign: 'right', flexShrink: 0 },
   apy: { display: 'block', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
