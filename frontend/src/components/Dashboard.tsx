@@ -54,7 +54,7 @@ interface TxRecord {
 }
 
 const PROTOCOL_TO_ID: Record<string, number> = {
-  'Aave V3': 0, 'Compound V3': 0, Curve: 1, Yearn: 1, Spark: 0, 'Morpho Aave': 0,
+  'Aave V3': 0, Aave: 0, Curve: 1, 'Compound V3': 2, Compound: 2, Yearn: 1, Spark: 0, 'Morpho Aave': 0,
 };
 const TOKEN_ADDRESSES: Record<string, string> = {
   USDC: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -153,7 +153,7 @@ export default function Dashboard() {
     setContractStatusLoading(true);
     setContractStatusError(null);
     try {
-      const status = await getContractStatus();
+      const status = await getContractStatus(wallet.address);
       setContractStatus(status);
     } catch (err: any) {
       setContractStatusError(err.message || 'Failed to load contract status');
@@ -190,7 +190,7 @@ export default function Dashboard() {
       if (!wallet.connected) {
         await wallet.connect();
       }
-      const hash = await migration.executeMigration(
+      const hash = await migration.executeRebalance(
         PROTOCOL_TO_ID[selectedPool.protocol] ?? 0,
         PROTOCOL_TO_ID[target.protocol] ?? 0,
         TOKEN_ADDRESSES[selectedPool.token] ?? '',

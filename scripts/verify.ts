@@ -30,6 +30,13 @@ const CONTRACTS = {
       ],
     ],
   },
+  compoundAdapter: {
+    address: process.env.COMPOUND_ADAPTER_ADDRESS || '',
+    constructorArguments: [
+      process.env.COMPOUND_COMET_ADDRESS || process.env.SEPOLIA_COMPOUND_COMET || '',
+      process.env.ROUTER_ADDRESS || '',
+    ],
+  },
 };
 
 async function main() {

@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { addressExplorerUrl, txExplorerUrl } from '../utils/explorer';
 import type { ContractStatus } from '../services/routerContract';
+import {
+  getRuntimeRouterAddress,
+  setRuntimeRouterAddress,
+  clearRuntimeRouterAddress,
+} from '../services/routerContract';
 
 interface Props {
   status: ContractStatus | null;
@@ -21,6 +26,25 @@ export default function ContractStatusPanel({
   onTestTransaction,
   txLoading,
 }: Props) {
+  const [routerInput, setRouterInput] = useState<string>(() => getRuntimeRouterAddress());
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  const saveRouterAddress = () => {
+    try {
+      setRuntimeRouterAddress(routerInput);
+      setConfigError(null);
+      onRefresh();
+    } catch (err: any) {
+      setConfigError(err.message || 'Invalid router address');
+    }
+  };
+
+  const clearRouterAddress = () => {
+    clearRuntimeRouterAddress();
+    setRouterInput('');
+    setConfigError(null);
+  };
+
   return (
     <div style={styles.card}>
       <div style={styles.header}>
@@ -36,6 +60,23 @@ export default function ContractStatusPanel({
       </div>
 
       {error && <p style={styles.error}>{error}</p>}
+      {configError && <p style={styles.error}>{configError}</p>}
+
+      {!status?.contractAddress && (
+        <div style={styles.configWrap}>
+          <span style={styles.configLabel}>Set Router Address (runtime)</span>
+          <div style={styles.configRow}>
+            <input
+              style={styles.input}
+              placeholder="0x..."
+              value={routerInput}
+              onChange={(e) => setRouterInput(e.target.value)}
+            />
+            <button style={styles.btn} onClick={saveRouterAddress}>Save</button>
+            <button style={styles.btn} onClick={clearRouterAddress}>Clear</button>
+          </div>
+        </div>
+      )}
 
       <div style={styles.grid}>
         <div style={styles.item}><span style={styles.label}>Network</span><span style={styles.value}>{status?.network || '—'}</span></div>
@@ -57,6 +98,34 @@ export default function ContractStatusPanel({
           ) : <span style={styles.value}>No recent tx</span>}
         </div>
       </div>
+
+      {status?.userDeposits?.length ? (
+        <div style={styles.depositTableWrap}>
+          <div style={styles.depositTableTitle}>User Deposits (Tracked On-Chain)</div>
+          <table style={styles.depositTable}>
+            <thead>
+              <tr>
+                <th style={styles.th}>Token</th>
+                <th style={styles.th}>Total</th>
+                <th style={styles.th}>Aave</th>
+                <th style={styles.th}>Curve</th>
+                <th style={styles.th}>Compound</th>
+              </tr>
+            </thead>
+            <tbody>
+              {status.userDeposits.map((d) => (
+                <tr key={d.token}>
+                  <td style={styles.td}>{d.token}</td>
+                  <td style={styles.td}>{d.total}</td>
+                  <td style={styles.td}>{d.aave}</td>
+                  <td style={styles.td}>{d.curve}</td>
+                  <td style={styles.td}>{d.compound}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -69,9 +138,18 @@ const styles: Record<string, React.CSSProperties> = {
   btn: { border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-1)', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 },
   primaryBtn: { border: 'none', background: 'var(--primary)', color: '#fff', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 },
   error: { color: 'var(--danger)', fontSize: 12, margin: '0 0 8px' },
+  configWrap: { marginBottom: 12, padding: 10, border: '1px solid var(--border)', borderRadius: 10, background: 'var(--surface)' },
+  configLabel: { display: 'block', marginBottom: 6, color: 'var(--text-2)', fontSize: 12, fontWeight: 600 },
+  configRow: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' },
+  input: { flex: 1, minWidth: 220, border: '1px solid var(--border)', borderRadius: 8, padding: '8px 10px', background: 'var(--card)', color: 'var(--text-1)' },
   grid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   item: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: { fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' },
   value: { fontSize: 13, color: 'var(--text-1)', fontWeight: 600 },
   link: { fontSize: 12, color: 'var(--primary)', textDecoration: 'none', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' },
+  depositTableWrap: { marginTop: 14, overflowX: 'auto' },
+  depositTableTitle: { fontSize: 12, color: 'var(--text-2)', marginBottom: 8, fontWeight: 600 },
+  depositTable: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
+  th: { textAlign: 'left', color: 'var(--text-3)', borderBottom: '1px solid var(--border)', padding: '6px 4px' },
+  td: { color: 'var(--text-1)', borderBottom: '1px solid var(--border)', padding: '6px 4px' },
 };

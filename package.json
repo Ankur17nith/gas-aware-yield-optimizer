@@ -8,6 +8,7 @@
     "deploy:local": "hardhat run scripts/deploy.ts --network localhost",
     "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network mainnet",
+    "demo:check": "node scripts/demo-check.js",
     "verify": "hardhat run scripts/verify.ts --network mainnet",
     "verify:sepolia": "hardhat verify --network sepolia",
     "node": "hardhat node",

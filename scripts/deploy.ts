@@ -11,12 +11,14 @@ import { ethers, network } from 'hardhat';
 // ── Network-specific addresses ──
 const NETWORK_CONFIG: Record<string, {
   aavePool: string;
+  compoundComet: string;
   curvePool: string;
   curveLp: string;
   stablecoins: { name: string; address: string }[];
 }> = {
   mainnet: {
     aavePool: '0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2',
+    compoundComet: '0xc3d688B66703497DAA19211EEdff47f25384cdc3',
     curvePool: '0xbEbc44782C7dB0a1A60Cb6fe97d0b483032FF1C7',
     curveLp: '0x6c3F90f043a72FA612cbac8115EE7e52BDe6E490',
     stablecoins: [
@@ -27,6 +29,7 @@ const NETWORK_CONFIG: Record<string, {
   },
   sepolia: {
     aavePool: '0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951',
+    compoundComet: process.env.SEPOLIA_COMPOUND_COMET || '0x0000000000000000000000000000000000000000',
     // Curve has no Sepolia deployment — use zero address (CurveAdapter
     // will be deployed but not functional until a Curve pool exists)
     curvePool: '0x0000000000000000000000000000000000000000',
@@ -64,7 +67,9 @@ async function main() {
 
   // ── 3. Deploy CurveAdapter ──
   const hasCurve = cfg.curvePool !== '0x0000000000000000000000000000000000000000';
+  const hasCompound = cfg.compoundComet !== '0x0000000000000000000000000000000000000000';
   let curveAdapterAddress = '0x0000000000000000000000000000000000000000';
+  let compoundAdapterAddress = '0x0000000000000000000000000000000000000000';
 
   if (hasCurve) {
     const CurveAdapter = await ethers.getContractFactory('CurveAdapter');
@@ -81,7 +86,18 @@ async function main() {
     console.log('CurveAdapter skipped (no Curve pool on this network)');
   }
 
-  // ── 4. Configure Router ──
+  // ── 4. Deploy CompoundAdapter ──
+  if (hasCompound) {
+    const CompoundAdapter = await ethers.getContractFactory('CompoundAdapter');
+    const compoundAdapter = await CompoundAdapter.deploy(cfg.compoundComet, routerAddress);
+    await compoundAdapter.waitForDeployment();
+    compoundAdapterAddress = await compoundAdapter.getAddress();
+    console.log('CompoundAdapter deployed to:', compoundAdapterAddress);
+  } else {
+    console.log('CompoundAdapter skipped (no Comet configured on this network)');
+  }
+
+  // ── 5. Configure Router ──
   // Set adapters
   await router.setAdapter(0, aaveAdapterAddress); // Protocol.AAVE = 0
   console.log('Router: Aave adapter set');
@@ -89,6 +105,11 @@ async function main() {
   if (hasCurve) {
     await router.setAdapter(1, curveAdapterAddress); // Protocol.CURVE = 1
     console.log('Router: Curve adapter set');
+  }
+
+  if (hasCompound) {
+    await router.setAdapter(2, compoundAdapterAddress); // Protocol.COMPOUND = 2
+    console.log('Router: Compound adapter set');
   }
 
   // Whitelist stablecoins
@@ -102,10 +123,12 @@ async function main() {
   console.log('Router:       ', routerAddress);
   console.log('AaveAdapter:  ', aaveAdapterAddress);
   console.log('CurveAdapter: ', curveAdapterAddress);
+  console.log('CompoundAdapter: ', compoundAdapterAddress);
   console.log('\nAdd to your .env:');
   console.log(`ROUTER_ADDRESS=${routerAddress}`);
   console.log(`AAVE_ADAPTER_ADDRESS=${aaveAdapterAddress}`);
   console.log(`CURVE_ADAPTER_ADDRESS=${curveAdapterAddress}`);
+  console.log(`COMPOUND_ADAPTER_ADDRESS=${compoundAdapterAddress}`);
   console.log(`VITE_ROUTER_ADDRESS=${routerAddress}`);
 }
 

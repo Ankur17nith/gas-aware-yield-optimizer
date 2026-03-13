@@ -1,4 +1,4 @@
-import { Contract, parseUnits } from 'ethers';
+import { Contract, formatUnits, parseUnits } from 'ethers';
 import { getProvider, getSigner } from './blockchain';
 import type { MigrationParams } from '../types/migration';
 
@@ -8,6 +8,8 @@ const ROUTER_ABI = [
   'function withdraw(uint8 protocol, address token, uint256 amount, bytes extraData) external',
   'function migrate((uint8 fromProtocol, uint8 toProtocol, address token, uint256 amount, uint256 minReceived, bytes extraData) params) external',
   'function migratePosition((uint8 fromProtocol, uint8 toProtocol, address token, uint256 amount, uint256 minReceived, bytes extraData) params) external',
+  'function rebalance((uint8 fromProtocol, uint8 toProtocol, address token, uint256 amount, uint256 minReceived, bytes extraData) params) external',
+  'function getUserDeposits(address user, address token) external view returns (uint256 aaveAmount, uint256 curveAmount, uint256 compoundAmount, uint256 total)',
   'function getSupportedTokens() external view returns (address[])',
   'function getAdapter(uint8 protocol) external view returns (address)',
   'function paused() external view returns (bool)',
@@ -22,7 +24,47 @@ const ERC20_ABI = [
   'function decimals() external view returns (uint8)',
 ];
 
-const ROUTER_ADDRESS = import.meta.env.VITE_ROUTER_ADDRESS || '';
+const ROUTER_STORAGE_KEY = 'yo_router_address';
+
+function normalizeAddress(address: string): string {
+  return address.trim();
+}
+
+function isAddressLike(value: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(value);
+}
+
+function readRuntimeRouterAddress(): string {
+  const envAddress = normalizeAddress(import.meta.env.VITE_ROUTER_ADDRESS || '');
+  if (isAddressLike(envAddress)) return envAddress;
+
+  if (typeof window !== 'undefined') {
+    const stored = normalizeAddress(window.localStorage.getItem(ROUTER_STORAGE_KEY) || '');
+    if (isAddressLike(stored)) return stored;
+  }
+
+  return '';
+}
+
+export function getRuntimeRouterAddress(): string {
+  return readRuntimeRouterAddress();
+}
+
+export function setRuntimeRouterAddress(address: string): void {
+  const normalized = normalizeAddress(address);
+  if (!isAddressLike(normalized)) {
+    throw new Error('Invalid router address format');
+  }
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(ROUTER_STORAGE_KEY, normalized);
+  }
+}
+
+export function clearRuntimeRouterAddress(): void {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(ROUTER_STORAGE_KEY);
+  }
+}
 
 export interface ContractStatus {
   network: string;
@@ -30,6 +72,13 @@ export interface ContractStatus {
   contractAddress: string;
   latestBlock: number;
   lastTransactionHash: string | null;
+  userDeposits: {
+    token: string;
+    total: string;
+    aave: string;
+    curve: string;
+    compound: string;
+  }[];
 }
 
 let lastTransactionHash: string | null = null;
@@ -37,8 +86,9 @@ let lastTransactionHash: string | null = null;
 function getRouterContract(): Contract {
   const signer = getSigner();
   if (!signer) throw new Error('Wallet not connected');
-  if (!ROUTER_ADDRESS) throw new Error('Router address not configured');
-  return new Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
+  const routerAddress = getRuntimeRouterAddress();
+  if (!routerAddress) throw new Error('Router address not configured');
+  return new Contract(routerAddress, ROUTER_ABI, signer);
 }
 
 function getTokenContract(tokenAddress: string): Contract {
@@ -55,9 +105,11 @@ export async function approveToken(
   amount: string,
   decimals: number = 6
 ): Promise<string> {
+  const routerAddress = getRuntimeRouterAddress();
+  if (!routerAddress) throw new Error('Router address not configured');
   const token = getTokenContract(tokenAddress);
   const amountWei = parseUnits(amount, decimals);
-  const tx = await token.approve(ROUTER_ADDRESS, amountWei);
+  const tx = await token.approve(routerAddress, amountWei);
   const receipt = await tx.wait();
   return receipt.hash;
 }
@@ -102,6 +154,24 @@ export async function withdraw(
 export async function migrate(params: MigrationParams): Promise<string> {
   const router = getRouterContract();
   const tx = await router.migrate({
+    fromProtocol: params.fromProtocol,
+    toProtocol: params.toProtocol,
+    token: params.token,
+    amount: parseUnits(params.amount, 6),
+    minReceived: parseUnits(params.minReceived, 6),
+    extraData: '0x',
+  });
+  const receipt = await tx.wait();
+  lastTransactionHash = receipt.hash;
+  return receipt.hash;
+}
+
+/**
+ * Rebalance funds between protocols via the Router.
+ */
+export async function rebalance(params: MigrationParams): Promise<string> {
+  const router = getRouterContract();
+  const tx = await router.rebalance({
     fromProtocol: params.fromProtocol,
     toProtocol: params.toProtocol,
     token: params.token,
@@ -160,18 +230,44 @@ export async function getTokenBalance(
   return (Number(balance) / 10 ** Number(decimals)).toFixed(2);
 }
 
-export async function getContractStatus(): Promise<ContractStatus> {
+export async function getContractStatus(walletAddress?: string | null): Promise<ContractStatus> {
   const provider = getProvider();
   if (!provider) throw new Error('Wallet provider not connected');
+  const routerAddress = getRuntimeRouterAddress();
+  if (!routerAddress) throw new Error('Router address not configured');
 
   const network = await provider.getNetwork();
   const latestBlock = await provider.getBlockNumber();
+  const signer = getSigner();
+  const user = walletAddress || (signer ? await signer.getAddress() : null);
+
+  const userDeposits: ContractStatus['userDeposits'] = [];
+  if (user) {
+    const router = new Contract(routerAddress, ROUTER_ABI, provider);
+    const trackedTokens = [
+      { token: 'USDC', address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+      { token: 'USDT', address: '0xdAC17F958D2ee523a2206206994597C13D831ec7' },
+      { token: 'DAI', address: '0x6B175474E89094C44Da98b954EedeAC495271d0F' },
+    ];
+
+    for (const t of trackedTokens) {
+      const [aaveAmount, curveAmount, compoundAmount, total] = await router.getUserDeposits(user, t.address);
+      userDeposits.push({
+        token: t.token,
+        aave: Number(formatUnits(aaveAmount, 6)).toFixed(2),
+        curve: Number(formatUnits(curveAmount, 6)).toFixed(2),
+        compound: Number(formatUnits(compoundAmount, 6)).toFixed(2),
+        total: Number(formatUnits(total, 6)).toFixed(2),
+      });
+    }
+  }
 
   return {
     network: network.name,
     chainId: Number(network.chainId),
-    contractAddress: ROUTER_ADDRESS,
+    contractAddress: routerAddress,
     latestBlock,
     lastTransactionHash,
+    userDeposits,
   };
 }

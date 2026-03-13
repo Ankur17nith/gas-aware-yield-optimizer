@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { api } from '../services/api';
 import { migrate as migrateOnChain } from '../services/routerContract';
+import { rebalance as rebalanceOnChain } from '../services/routerContract';
 import type { MigrationRecommendation } from '../types/migration';
 
 interface MigrationState {
@@ -83,6 +84,41 @@ export function useMigration() {
     []
   );
 
+  const executeRebalance = useCallback(
+    async (
+      fromProtocol: number,
+      toProtocol: number,
+      tokenAddress: string,
+      amount: string,
+      minReceived: string
+    ) => {
+      setState((s) => ({ ...s, txLoading: true, error: null, txHash: null }));
+      try {
+        const hash = await rebalanceOnChain({
+          fromProtocol,
+          toProtocol,
+          token: tokenAddress,
+          amount,
+          minReceived,
+        });
+        setState((s) => ({
+          ...s,
+          txHash: hash,
+          txLoading: false,
+        }));
+        return hash;
+      } catch (err: any) {
+        setState((s) => ({
+          ...s,
+          txLoading: false,
+          error: err.message || 'Rebalance transaction failed',
+        }));
+        return null;
+      }
+    },
+    []
+  );
+
   const reset = useCallback(() => {
     setState({
       recommendation: null,
@@ -93,5 +129,5 @@ export function useMigration() {
     });
   }, []);
 
-  return { ...state, fetchRecommendation, executeMigration, reset };
+  return { ...state, fetchRecommendation, executeMigration, executeRebalance, reset };
 }
