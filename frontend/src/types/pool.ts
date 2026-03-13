@@ -1,6 +1,7 @@
 export interface Pool {
   pool_id: string;
   protocol: string;
+  pool_name?: string;
   token: string;
   symbol: string;
   apy: number;

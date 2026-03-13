@@ -18,7 +18,7 @@ interface Props {
   onPoolClick?: (pool: Pool) => void;
 }
 
-type SortKey = 'rank' | 'protocol' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score';
+type SortKey = 'rank' | 'protocol' | 'pool_name' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score';
 
 export default function PoolTable({ pools, predictions, loading, error, onMigrate, onPoolClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('net_apy');
@@ -33,11 +33,11 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
     const arr = [...pools];
     const dir = sortAsc ? 1 : -1;
     arr.sort((a, b) => {
-      const av = sortKey === 'protocol' ? a.protocol : sortKey === 'token' ? a.token
+      const av = sortKey === 'protocol' ? a.protocol : sortKey === 'pool_name' ? (a.pool_name || a.pool_meta || '') : sortKey === 'token' ? a.token
         : sortKey === 'gross_apy' ? (a.gross_apy ?? a.apy ?? 0) : sortKey === 'gas_cost_usd' ? (a.gas_cost_usd ?? 0)
         : sortKey === 'net_apy' ? (a.net_apy ?? a.apy ?? 0) : sortKey === 'tvl' ? (a.tvl ?? 0)
         : sortKey === 'risk_score' ? (a.risk_score ?? 0) : (a.rank ?? 0);
-      const bv = sortKey === 'protocol' ? b.protocol : sortKey === 'token' ? b.token
+      const bv = sortKey === 'protocol' ? b.protocol : sortKey === 'pool_name' ? (b.pool_name || b.pool_meta || '') : sortKey === 'token' ? b.token
         : sortKey === 'gross_apy' ? (b.gross_apy ?? b.apy ?? 0) : sortKey === 'gas_cost_usd' ? (b.gas_cost_usd ?? 0)
         : sortKey === 'net_apy' ? (b.net_apy ?? b.apy ?? 0) : sortKey === 'tvl' ? (b.tvl ?? 0)
         : sortKey === 'risk_score' ? (b.risk_score ?? 0) : (b.rank ?? 0);
@@ -55,7 +55,7 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
   predictions.forEach((p) => predMap.set(p.pool_id, p));
 
   const cols: { label: string; key: SortKey | '' }[] = [
-    { label: '#', key: 'rank' }, { label: 'Protocol', key: 'protocol' }, { label: 'Token', key: 'token' },
+    { label: '#', key: 'rank' }, { label: 'Protocol', key: 'protocol' }, { label: 'Pool', key: 'pool_name' }, { label: 'Token', key: 'token' },
     { label: 'Gross APY', key: 'gross_apy' }, { label: 'Gas Cost', key: 'gas_cost_usd' },
     { label: 'Net APY', key: 'net_apy' }, { label: 'Risk', key: 'risk_score' }, { label: 'TVL', key: 'tvl' },
     { label: 'AI Prediction', key: '' }, { label: '', key: '' },
@@ -91,6 +91,12 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                       <ProtocolIcon protocol={pool.protocol} size={20} />
                       <span style={styles.protocol}>{pool.protocol}</span>
                     </span>
+                  </td>
+                  <td style={{ ...styles.td, whiteSpace: 'normal' }}>
+                    <div style={styles.poolCell}>
+                      <span style={styles.poolName}>{pool.pool_name || pool.pool_meta || 'Standard Pool'}</span>
+                      <span style={styles.poolLabel}>{pool.protocol} - {pool.pool_name || pool.pool_meta || 'Standard Pool'} - {pool.token}</span>
+                    </div>
                   </td>
                   <td style={styles.td}><span style={styles.tokenBadge}>{pool.token}</span></td>
                   <td style={styles.td}>
@@ -161,7 +167,7 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
   },
   tableScroll: { overflowX: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 900 },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 1060 },
   th: {
     textAlign: 'left', padding: '12px 16px', color: 'var(--text-3)',
     fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em',
@@ -173,6 +179,13 @@ const styles: Record<string, React.CSSProperties> = {
   rank: { color: 'var(--text-3)', fontSize: 12, fontWeight: 500 },
   protoCell: { display: 'flex', alignItems: 'center', gap: 8 },
   protocol: { fontWeight: 600, color: 'var(--text-1)' },
+  poolCell: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  poolName: { fontWeight: 600, color: 'var(--text-1)' },
+  poolLabel: { fontSize: 11, color: 'var(--text-3)' },
   tokenBadge: {
     display: 'inline-block', background: 'rgba(91,140,255,0.1)', color: 'var(--primary)',
     padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600,

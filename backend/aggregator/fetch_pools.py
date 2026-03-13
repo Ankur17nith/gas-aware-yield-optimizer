@@ -43,6 +43,7 @@ DROP_OUTLIER_APY = 1000.0
 class PoolData(TypedDict):
     pool_id: str
     protocol: str
+    pool_name: str
     chain: str
     token: str
     tvl: float
@@ -126,6 +127,7 @@ async def fetch_all_pools(chain: str | None = None) -> list[PoolData]:
         net_apy = round(max(gross_apy - gas_cost_estimate, 0), 4)
 
         pool_id = p.get("pool", "")
+        pool_name = _derive_pool_name(p, matched_token)
         pool_address = ""
         if isinstance(pool_id, str) and pool_id.startswith("0x"):
             pool_address = pool_id
@@ -138,6 +140,7 @@ async def fetch_all_pools(chain: str | None = None) -> list[PoolData]:
             {
                 "pool_id": pool_id,
                 "protocol": _normalize_protocol(project),
+                "pool_name": pool_name,
                 "token": matched_token,
                 "symbol": symbol,
                 "gross_apy": round(gross_apy, 4),
@@ -178,3 +181,15 @@ def _normalize_protocol(raw: str) -> str:
     if "spark" in lower:
         return "Spark"
     return raw.title()
+
+
+def _derive_pool_name(raw_pool: dict, matched_token: str) -> str:
+    pool_meta = str(raw_pool.get("poolMeta") or "").strip()
+    if pool_meta:
+        return pool_meta
+
+    symbol = str(raw_pool.get("symbol") or "").strip()
+    if symbol and symbol.upper() != matched_token.upper():
+        return symbol
+
+    return "Standard Pool"
