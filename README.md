@@ -7,6 +7,7 @@ A full-stack DeFi application that helps users maximize yield on stablecoins (US
 - **Real-Time Net APY** — See actual yield after gas costs, not just gross APY
 - **AI Yield Predictions** — ML model predicts 30-day forward yields with confidence intervals
 - **Smart Migration** — One-click migration between protocols with break-even analysis
+- **Autonomous Strategy Agent** — IQ-style decision engine for migrate/consider/hold actions
 - **Multi-Protocol Support** — Aave V3, Curve, Compound V3, Yearn, Spark, Morpho
 - **Live Data** — Real-time data from DefiLlama, Etherscan, and on-chain sources
 
@@ -42,6 +43,8 @@ yield-optimizer/
 │       ├── services/       # API & blockchain services
 │       ├── types/          # TypeScript interfaces
 │       └── utils/          # Formatting & calculations
+├── agents/                 # Autonomous strategy agent definitions
+│   └── yieldStrategyAgent.ts
 ├── scripts/                # Hardhat deploy & verify scripts
 ├── tests/                  # Smart contract tests
 ├── abi/                    # Contract ABI files
@@ -120,7 +123,20 @@ npx hardhat run scripts/deploy.ts --network localhost
 | POST | `/net-yield` | Calculate net APY for a deposit amount |
 | POST | `/predictions` | AI yield predictions |
 | POST | `/migration` | Migration recommendation |
+| GET | `/ai-agent/strategy` | Autonomous strategy recommendation |
 | GET | `/historical/{pool_id}` | 30-day historical APY |
+
+## Autonomous Agent Architecture
+
+- TypeScript strategy module: `agents/yieldStrategyAgent.ts`
+- Backend strategy execution endpoint: `GET /ai-agent/strategy`
+- Frontend dashboard panel: `Autonomous Strategy Agent`
+
+The strategy agent consumes live pools, gas, and pricing inputs, scores candidate stablecoin pools with risk/liquidity adjustments, and outputs an action (`migrate`, `consider`, `hold`) with confidence and reasoning.
+
+### IQ AI ADK Note
+
+The package name `@iqai/agent-kit` is not currently available on the public npm registry. This implementation uses an **iqai-compatible-fallback** architecture so the agent remains production-ready and can be swapped to the official SDK once the package coordinates are available.
 
 ## Smart Contract Security
 

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import math
 import uvicorn
 
 from config import settings
@@ -16,6 +17,58 @@ from ai_engine.model_loader import load_model
 from ai_engine.yield_predictor import predict_yields
 
 logger = logging.getLogger(__name__)
+
+
+def _pool_net_apy(pool: dict) -> float:
+    return float(pool.get("net_apy", pool.get("apy", 0)) or 0)
+
+
+def _risk_penalty(pool: dict) -> float:
+    risk = str(pool.get("risk_level", "Medium") or "Medium").lower()
+    if risk == "low":
+        return 0.0
+    if risk == "high":
+        return 3.0
+    return 1.2
+
+
+def _agent_score(pool: dict) -> float:
+    net_apy = _pool_net_apy(pool)
+    tvl = float(pool.get("tvl", 0) or 0)
+    # Log-based TVL bonus rewards deeper liquidity while keeping scores bounded.
+    tvl_bonus = max(0.0, min((math.log10(max(tvl, 1.0)) - 4.0) * 0.7, 2.5))
+    return net_apy + tvl_bonus - _risk_penalty(pool)
+
+
+def _strategy_action(current: dict, target: dict) -> str:
+    apy_delta = _pool_net_apy(target) - _pool_net_apy(current)
+    score_delta = _agent_score(target) - _agent_score(current)
+    if apy_delta >= 0.25 and score_delta >= 0.35:
+        return "migrate"
+    if apy_delta >= 0.12 and score_delta >= 0.2:
+        return "consider"
+    return "hold"
+
+
+def _build_reasoning(current: dict, target: dict, gas_gwei: float, action: str) -> list[str]:
+    apy_delta = _pool_net_apy(target) - _pool_net_apy(current)
+    current_tvl = float(current.get("tvl", 0) or 0)
+    target_tvl = float(target.get("tvl", 0) or 0)
+    reasons = [
+        f"Net APY delta is {apy_delta:.2f}% ({target.get('protocol')} vs {current.get('protocol')}).",
+        f"Liquidity comparison: current TVL ${current_tvl:,.0f}, target TVL ${target_tvl:,.0f}.",
+        f"Current gas regime is {gas_gwei:.1f} gwei, already included in net yield computation.",
+    ]
+    if action == "hold":
+        reasons.append("Expected gain does not clearly exceed migration friction threshold.")
+    return reasons
+
+
+def _projected_apy(pool: dict) -> float:
+    net_apy = _pool_net_apy(pool)
+    reward_apy = float(pool.get("reward_apy", 0) or 0)
+    drift = min(reward_apy * 0.08, 0.8)
+    return round(max(net_apy + drift, 0), 4)
 
 
 @asynccontextmanager
@@ -315,6 +368,91 @@ async def portfolio(amount: float = 10000.0, chain: str | None = None):
     except Exception as exc:
         logger.exception("/portfolio failed")
         raise HTTPException(status_code=502, detail=f"Failed to compute portfolio: {exc}") from exc
+
+
+# ──────────────────────────────────────────────
+#  Autonomous AI Strategy Agent
+# ──────────────────────────────────────────────
+@app.get("/ai-agent/strategy")
+async def ai_agent_strategy(
+    current_protocol: str = "aave",
+    current_token: str = "USDC",
+    amount: float = 10000.0,
+    chain: str | None = None,
+):
+    """Return autonomous strategy recommendation for stablecoin reallocation."""
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
+        ranked = rank_pools(net_yields)
+
+        stable_ranked = [
+            p
+            for p in ranked
+            if str(p.get("token", "")).upper() in {"USDC", "USDT", "DAI", "FRAX"}
+        ]
+        if not stable_ranked:
+            raise HTTPException(status_code=404, detail="No stablecoin pools available for agent strategy")
+
+        current_matches = [
+            p
+            for p in stable_ranked
+            if str(p.get("protocol", "")).lower() == current_protocol.lower()
+            and str(p.get("token", "")).upper() == current_token.upper()
+        ]
+
+        if current_matches:
+            current_pool = max(current_matches, key=_agent_score)
+        else:
+            current_pool = min(stable_ranked, key=_agent_score)
+
+        target_pool = max(stable_ranked, key=_agent_score)
+        action = _strategy_action(current_pool, target_pool)
+        score_delta = _agent_score(target_pool) - _agent_score(current_pool)
+        confidence = int(max(52, min(97, round(58 + (score_delta * 18)))))
+        projected_target_apy = _projected_apy(target_pool)
+        projected_current_apy = _projected_apy(current_pool)
+
+        expected_delta_30d = round(
+            amount * ((projected_target_apy - projected_current_apy) / 100.0) * (30 / 365),
+            2,
+        )
+
+        gas_gwei = float(gas_data.get("standard", 0) or 0)
+        reasons = _build_reasoning(current_pool, target_pool, gas_gwei, action)
+
+        return {
+            "agent": {
+                "name": "IQ Yield Strategy Agent",
+                "framework": "iqai-compatible-fallback",
+                "mode": "autonomous",
+            },
+            "action": action,
+            "confidence": confidence,
+            "current": current_pool,
+            "recommended": target_pool,
+            "predicted_net_apy_30d": projected_target_apy,
+            "estimated_30d_delta_usd": expected_delta_30d,
+            "reasoning": reasons,
+            "onchain_trigger": {
+                "supported": False,
+                "method": "migrateStrategy(address)",
+                "status": "router_method_unavailable",
+            },
+            "sources": {
+                "input_pools": "DefiLlama",
+                "prices": price_data.get("source", "coingecko"),
+                "gas": gas_data.get("source", "etherscan/rpc"),
+                "ranking": "internal-agent-score-v1",
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("/ai-agent/strategy failed")
+        raise HTTPException(status_code=502, detail=f"Failed to compute AI agent strategy: {exc}") from exc
 
 
 if __name__ == "__main__":

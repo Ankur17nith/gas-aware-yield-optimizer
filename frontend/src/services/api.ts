@@ -22,6 +22,27 @@ function getApiBaseUrl(): string {
 
 const BASE_URL = getApiBaseUrl();
 
+export interface AiAgentStrategyResponse {
+  agent: {
+    name: string;
+    framework: string;
+    mode: string;
+  };
+  action: 'migrate' | 'consider' | 'hold';
+  confidence: number;
+  current: any;
+  recommended: any;
+  predicted_net_apy_30d: number;
+  estimated_30d_delta_usd: number;
+  reasoning: string[];
+  onchain_trigger?: {
+    supported: boolean;
+    method?: string;
+    status?: string;
+  };
+  sources?: Record<string, string>;
+}
+
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
   const isAbsoluteBase = /^https?:\/\//.test(BASE_URL);
   const url = isAbsoluteBase
@@ -153,5 +174,21 @@ export const api = {
     const params: Record<string, string> = { amount: amount.toString() };
     if (chain) params.chain = chain;
     return request<any>('/portfolio', params);
+  },
+
+  /** Fetch autonomous AI strategy recommendation */
+  getAiAgentStrategy: (
+    currentProtocol: string,
+    currentToken: string,
+    amount: number,
+    chain?: string
+  ) => {
+    const params: Record<string, string> = {
+      current_protocol: currentProtocol,
+      current_token: currentToken,
+      amount: amount.toString(),
+    };
+    if (chain) params.chain = chain;
+    return request<AiAgentStrategyResponse>('/ai-agent/strategy', params);
   },
 };

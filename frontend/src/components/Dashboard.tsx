@@ -23,6 +23,7 @@ import HowItWorks from './HowItWorks';
 import AlertSettings from './AlertSettings';
 import AutoCompoundToggle from './AutoCompoundToggle';
 import AIRecommendation from './AIRecommendation';
+import AIAgentStrategyPanel from './AIAgentStrategyPanel';
 import APYHeatmap from './APYHeatmap';
 import ActivityFeed from './ActivityFeed';
 import ContractStatusPanel from './ContractStatusPanel';
@@ -317,6 +318,17 @@ export default function Dashboard() {
   /* Derived data — backend already filters by chain */
   const filteredPools = pools.pools;
 
+  const handleApplyAgentStrategy = useCallback((protocol: string, token: string) => {
+    const target = filteredPools.find(
+      (p) => p.protocol.toLowerCase() === protocol.toLowerCase() && p.token.toUpperCase() === token.toUpperCase()
+    );
+    if (!target) {
+      addToast('warning', 'Recommended pool is not in the currently loaded list. Refresh and retry.');
+      return;
+    }
+    handleMigrate(target);
+  }, [filteredPools, handleMigrate, addToast]);
+
   const topPool = filteredPools[0];
   const totalTVL = filteredPools.reduce((s, p) => s + (p.tvl ?? 0), 0);
   const bestApy = filteredPools.length ? Math.max(...filteredPools.map(p => p.net_apy ?? p.apy ?? 0)) : 0;
@@ -465,6 +477,16 @@ export default function Dashboard() {
               {/* AI Recommendation */}
               <div style={{ gridColumn: '1 / -1' }}>
                 <AIRecommendation pools={filteredPools} depositAmount={depositAmount} />
+              </div>
+
+              {/* Autonomous AI Agent Strategy */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <AIAgentStrategyPanel
+                  pools={filteredPools}
+                  depositAmount={depositAmount}
+                  selectedChain={selectedChain}
+                  onApplyRecommendation={handleApplyAgentStrategy}
+                />
               </div>
 
               {/* Quick yield calculator + auto-compound */}
