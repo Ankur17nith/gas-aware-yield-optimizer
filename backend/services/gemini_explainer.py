@@ -1,29 +1,42 @@
 import logging
 from typing import Sequence
 
-import google.generativeai as genai
+try:
+    from google import genai as _genai
+except Exception:  # pragma: no cover - import failure fallback
+    _genai = None
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 _model = None
+_client = None
 
 
 def _get_model():
-    global _model
+    global _model, _client
     if _model is not None:
         return _model
 
     if not settings.GEMINI_API_KEY:
         return None
 
+    if _genai is None:
+        return None
+
     try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        _model = genai.GenerativeModel(settings.GEMINI_MODEL)
+        client_cls = getattr(_genai, "Client", None)
+        if client_cls is None:
+            logger.warning("Gemini SDK does not expose expected API; using fallback explainer")
+            return None
+
+        _client = client_cls(api_key=settings.GEMINI_API_KEY)
+        _model = settings.GEMINI_MODEL
     except Exception:
         logger.exception("Failed to initialize Gemini model")
         _model = None
+        _client = None
 
     return _model
 
@@ -60,7 +73,7 @@ def explain_strategy(
     reasoning: Sequence[str] | None = None,
 ) -> str:
     model = _get_model()
-    if model is None:
+    if model is None or _client is None:
         return _fallback_explanation(protocol, pool, token, apy, tvl, confidence, reasoning)
 
     prompt = f"""
@@ -80,7 +93,7 @@ Signals: {', '.join(reasoning) if reasoning else 'n/a'}
 """.strip()
 
     try:
-        response = model.generate_content(prompt)
+        response = _client.models.generate_content(model=model, contents=prompt)
         text = (getattr(response, "text", "") or "").strip()
         if text:
             return text
