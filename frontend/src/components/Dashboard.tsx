@@ -466,7 +466,7 @@ export default function Dashboard() {
                     <>
                       <StatCard label="Best Net APY" value={topPool ? formatAPY(topPool.net_apy ?? topPool.apy) : '—'} sub={topPool ? `${topPool.protocol} · ${topPool.token}` : ''} color="var(--success)" />
                       <StatCard label="Pools Tracked" value={String(filteredPools.length)} sub="Across DeFi protocols" />
-                      <StatCard label="Avg Gas Cost" value={formatUSD(avgGas)} sub="Round-trip" />
+                      <StatCard label="Avg Gas Cost" value={formatUSD(avgGas)} sub="Approve + Deposit avg" />
                       <StatCard label="30d Projection" value={topPool ? formatUSD(topPool.profit_30d ?? 0) : '—'} sub={`On ${formatCompact(depositAmount)} deposit`} color="var(--success)" />
                     </>
                   )}

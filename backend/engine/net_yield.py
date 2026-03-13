@@ -9,15 +9,15 @@ Supports multi-chain gas pricing (L2s are much cheaper).
 
 # Gas units for different operations (estimated)
 GAS_ESTIMATES = {
-    "Aave V3": {"deposit": 250_000, "withdraw": 200_000},
-    "Compound V3": {"deposit": 220_000, "withdraw": 180_000},
+    "Aave": {"approve": 55_000, "deposit": 250_000, "withdraw": 200_000},
+    "Compound": {"approve": 55_000, "deposit": 220_000, "withdraw": 180_000},
     "Curve": {"deposit": 350_000, "withdraw": 300_000},
     "Yearn": {"deposit": 300_000, "withdraw": 250_000},
     "Spark": {"deposit": 250_000, "withdraw": 200_000},
     "Morpho Aave": {"deposit": 280_000, "withdraw": 230_000},
 }
 
-DEFAULT_GAS = {"deposit": 250_000, "withdraw": 200_000}
+DEFAULT_GAS = {"approve": 55_000, "deposit": 250_000, "withdraw": 200_000}
 
 # Gas price multiplier relative to Ethereum L1.
 # L2s settle on Ethereum but execution gas is dramatically cheaper.
@@ -62,10 +62,12 @@ def compute_net_yields(
 
         # Get gas estimate for this protocol
         gas_est = GAS_ESTIMATES.get(protocol, DEFAULT_GAS)
+        approve_gas = gas_est.get("approve", DEFAULT_GAS["approve"])
         deposit_gas = gas_est["deposit"]
         withdraw_gas = gas_est["withdraw"]
 
-        # Total gas for a round-trip (deposit + eventual withdraw)
+        approve_plus_deposit_units = approve_gas + deposit_gas
+        avg_tx_units = approve_plus_deposit_units / 2
         total_gas_units = deposit_gas + withdraw_gas
 
         # Apply chain-specific gas multiplier (L2s are much cheaper)
@@ -73,12 +75,14 @@ def compute_net_yields(
         chain_multiplier = CHAIN_GAS_MULTIPLIER.get(pool_chain, 1.0)
 
         # Gas cost in ETH then USD
-        gas_cost_eth = (total_gas_units * gas_gwei * chain_multiplier) / 1e9
-        gas_cost_usd = round(gas_cost_eth * eth_price, 2)
+        avg_tx_cost_eth = (avg_tx_units * gas_gwei * chain_multiplier) / 1e9
+        avg_tx_cost_usd = round(avg_tx_cost_eth * eth_price, 2)
+        roundtrip_cost_eth = (total_gas_units * gas_gwei * chain_multiplier) / 1e9
+        roundtrip_cost_usd = round(roundtrip_cost_eth * eth_price, 2)
 
-        # Annualized gas impact as percentage of deposit
+        # Gas impact percent follows: (Estimated Gas Cost / Deposit Amount) * 100.
         if deposit_amount > 0:
-            gas_impact_pct = (gas_cost_usd / deposit_amount) * 100
+            gas_impact_pct = (avg_tx_cost_usd / deposit_amount) * 100
         else:
             gas_impact_pct = 0
 
@@ -96,7 +100,11 @@ def compute_net_yields(
             {
                 **pool,
                 "gross_apy": gross_apy,
-                "gas_cost_usd": gas_cost_usd,
+                "gas_cost_usd": avg_tx_cost_usd,
+                "approve_gas": approve_gas,
+                "approve_cost_usd": round((approve_gas * gas_gwei * chain_multiplier / 1e9) * eth_price, 2),
+                "deposit_cost_usd": round((deposit_gas * gas_gwei * chain_multiplier / 1e9) * eth_price, 2),
+                "roundtrip_cost_usd": roundtrip_cost_usd,
                 "gas_impact_pct": round(gas_impact_pct, 4),
                 "protocol_fee_bps": protocol_fee_bps,
                 "protocol_fee_pct": round(protocol_fee_pct, 4),

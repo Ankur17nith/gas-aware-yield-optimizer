@@ -52,7 +52,7 @@ export function usePools(autoFetch = true, chain?: string) {
   const fetchPools = useCallback(async (amount: number = 10000, chainOverride?: string) => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const data = await api.getPools(chainOverride ?? chain);
+      const data = await api.getNetYield(amount, chainOverride ?? chain);
       const processed = processPools(data.pools || []);
       setState({
         pools: processed,

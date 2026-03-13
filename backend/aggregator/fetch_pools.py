@@ -127,7 +127,7 @@ async def fetch_all_pools(chain: str | None = None) -> list[PoolData]:
         net_apy = round(max(gross_apy - gas_cost_estimate, 0), 4)
 
         pool_id = p.get("pool", "")
-        pool_name = _derive_pool_name(p, matched_token)
+        pool_name = _derive_pool_name(p, project, matched_token)
         pool_address = ""
         if isinstance(pool_id, str) and pool_id.startswith("0x"):
             pool_address = pool_id
@@ -183,13 +183,24 @@ def _normalize_protocol(raw: str) -> str:
     return raw.title()
 
 
-def _derive_pool_name(raw_pool: dict, matched_token: str) -> str:
+def _derive_pool_name(raw_pool: dict, project: str, matched_token: str) -> str:
     pool_meta = str(raw_pool.get("poolMeta") or "").strip()
     if pool_meta:
         return pool_meta
 
     symbol = str(raw_pool.get("symbol") or "").strip()
-    if symbol and symbol.upper() != matched_token.upper():
-        return symbol
+    clean_project = _normalize_protocol(project)
 
-    return "Standard Pool"
+    if "yearn" in project:
+        return f"{matched_token} Vault"
+    if "compound" in project:
+        return f"{matched_token} Lending Pool"
+    if "aave" in project:
+        return f"{matched_token} Variable Pool"
+
+    if symbol:
+        if symbol.upper() == matched_token.upper():
+            return f"{clean_project} {matched_token} Pool"
+        return f"{clean_project} {symbol} Pool"
+
+    return f"{clean_project} {matched_token} Pool"

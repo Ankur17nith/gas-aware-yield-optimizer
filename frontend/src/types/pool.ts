@@ -15,6 +15,9 @@ export interface Pool {
   // Computed by net-yield engine
   gross_apy?: number;
   gas_cost_usd?: number;
+  approve_cost_usd?: number;
+  deposit_cost_usd?: number;
+  roundtrip_cost_usd?: number;
   gas_impact_pct?: number;
   net_apy?: number;
   profit_30d?: number;

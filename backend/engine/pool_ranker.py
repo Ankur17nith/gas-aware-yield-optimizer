@@ -5,13 +5,11 @@ Ranks pools by a composite score: net APY, TVL (liquidity safety),
 and protocol reliability.
 """
 
-PROTOCOL_TRUST_SCORES = {
-    "Aave V3": 0.95,
-    "Compound V3": 0.92,
-    "Curve": 0.90,
-    "Yearn": 0.85,
-    "Spark": 0.88,
-    "Morpho Aave": 0.87,
+PROTOCOL_REPUTATION_POINTS = {
+    "Aave": 30,
+    "Curve": 30,
+    "Compound": 28,
+    "Yearn": 27,
 }
 
 PROTOCOL_AGE_YEARS = {
@@ -24,8 +22,8 @@ PROTOCOL_AGE_YEARS = {
 }
 
 PROTOCOL_AUDIT_STATUS = {
-    "Aave V3": True,
-    "Compound V3": True,
+    "Aave": True,
+    "Compound": True,
     "Curve": True,
     "Yearn": True,
     "Spark": True,
@@ -61,7 +59,8 @@ def rank_pools(pools: list[dict]) -> list[dict]:
     for pool in pools:
         norm_apy = (pool["net_apy"] - min_apy) / apy_range
         norm_tvl = pool.get("tvl", 0) / max_tvl if max_tvl > 0 else 0
-        trust = PROTOCOL_TRUST_SCORES.get(pool["protocol"], 0.80)
+        trust = _compute_trust_score(pool)
+        trust_norm = trust / 100
 
         risk_score, risk_level = _compute_risk_score(pool)
 
@@ -72,7 +71,7 @@ def rank_pools(pools: list[dict]) -> list[dict]:
         score = round(
             W_NET_APY * norm_apy
             + W_TVL * norm_tvl
-            + W_TRUST * trust
+            + W_TRUST * trust_norm
             + W_RISK * safety_factor,
             4,
         )
@@ -94,6 +93,58 @@ def rank_pools(pools: list[dict]) -> list[dict]:
         pool["rank"] = i + 1
 
     return ranked
+
+
+def _compute_trust_score(pool: dict) -> int:
+    """
+    Trust Score (0-100):
+    - 40% TVL strength
+    - 30% protocol reputation
+    - 20% liquidity stability
+    - 10% smart contract risk
+    """
+    protocol = str(pool.get("protocol", "") or "")
+    tvl = float(pool.get("tvl", 0) or 0)
+    audited = PROTOCOL_AUDIT_STATUS.get(protocol, False)
+
+    if tvl >= 1_000_000_000:
+        tvl_score = 40
+    elif tvl >= 100_000_000:
+        tvl_score = 30
+    elif tvl >= 10_000_000:
+        tvl_score = 20
+    else:
+        tvl_score = 10
+
+    protocol_reputation = PROTOCOL_REPUTATION_POINTS.get(protocol, 20)
+
+    # Prefer real TVL change fields when available; fallback to TVL-size stability proxy.
+    tvl_change_pct = pool.get("tvl_change_7d_pct")
+    if tvl_change_pct is None:
+        tvl_change_pct = pool.get("tvl_change_pct")
+
+    if tvl_change_pct is None:
+        if tvl >= 1_000_000_000:
+            tvl_change_pct = 4.0
+        elif tvl >= 100_000_000:
+            tvl_change_pct = 7.0
+        elif tvl >= 10_000_000:
+            tvl_change_pct = 12.0
+        else:
+            tvl_change_pct = 22.0
+
+    tvl_change_abs = abs(float(tvl_change_pct))
+    if tvl_change_abs < 5:
+        liquidity_stability = 20
+    elif tvl_change_abs < 10:
+        liquidity_stability = 15
+    elif tvl_change_abs < 20:
+        liquidity_stability = 10
+    else:
+        liquidity_stability = 5
+
+    contract_risk = 10 if audited else 5
+    return int(tvl_score + protocol_reputation + liquidity_stability + contract_risk)
 
 
 def _compute_risk_score(pool: dict) -> tuple[float, str]:
