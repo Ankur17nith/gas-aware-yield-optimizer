@@ -8,6 +8,7 @@ A full-stack DeFi application that helps users maximize yield on stablecoins (US
 - **AI Yield Predictions** — ML model predicts 30-day forward yields with confidence intervals
 - **Smart Migration** — One-click migration between protocols with break-even analysis
 - **Autonomous Strategy Agent** — IQ-style decision engine for migrate/consider/hold actions
+- **Gemini AI Explanations** — Generates plain-language reasoning for recommended strategies
 - **Multi-Protocol Support** — Aave V3, Curve, Compound V3, Yearn, Spark, Morpho
 - **Live Data** — Real-time data from DefiLlama, Etherscan, and on-chain sources
 
@@ -35,6 +36,7 @@ yield-optimizer/
 │   ├── aggregator/         # Data fetching (DefiLlama, Etherscan)
 │   ├── engine/             # Net yield, ranking, migration logic
 │   ├── ai_engine/          # ML model training & prediction
+│   ├── services/           # External AI integrations (Gemini explainer)
 │   └── blockchain/         # On-chain interaction
 ├── frontend/               # React + TypeScript app
 │   └── src/
@@ -79,6 +81,10 @@ cp .env .env.local
 Required keys:
 - `RPC_URL` — Alchemy or Infura Ethereum RPC endpoint
 - `ETHERSCAN_API_KEY` — For gas prices and contract verification
+- `SEPOLIA_RPC_URL` — Sepolia RPC endpoint (required for Sepolia deploy)
+- `DEPLOYER_PRIVATE_KEY` — Deployer private key for Hardhat networks
+- `VITE_ROUTER_ADDRESS` — Router contract address used by frontend
+- `GEMINI_API_KEY` — Google Gemini API key for AI explanation generation
 
 ### 3. Run the Backend
 
@@ -120,11 +126,12 @@ npx hardhat run scripts/deploy.ts --network localhost
 | GET | `/pools` | Ranked pool data with APY, TVL |
 | GET | `/gas` | Current gas prices (safe/standard/fast) |
 | GET | `/prices` | Token and ETH prices |
-| POST | `/net-yield` | Calculate net APY for a deposit amount |
-| POST | `/predictions` | AI yield predictions |
-| POST | `/migration` | Migration recommendation |
+| GET | `/net-yield` | Calculate net APY for a deposit amount |
+| GET | `/predictions` | AI yield predictions |
+| GET | `/migration` | Migration recommendation |
 | GET | `/ai-agent/strategy` | Autonomous strategy recommendation |
-| GET | `/historical/{pool_id}` | 30-day historical APY |
+| GET | `/ai/explain-strategy` | Gemini explanation for a specific strategy |
+| GET | `/historical` | 30-day historical APY set |
 
 ## Autonomous Agent Architecture
 
@@ -133,6 +140,22 @@ npx hardhat run scripts/deploy.ts --network localhost
 - Frontend dashboard panel: `Autonomous Strategy Agent`
 
 The strategy agent consumes live pools, gas, and pricing inputs, scores candidate stablecoin pools with risk/liquidity adjustments, and outputs an action (`migrate`, `consider`, `hold`) with confidence and reasoning.
+
+### Gemini AI Layer
+
+- Backend service: `backend/services/gemini_explainer.py`
+- Direct explanation endpoint: `GET /ai/explain-strategy`
+- Integrated response field in strategy endpoint: `explanation`
+- Frontend integration: `Autonomous Strategy Agent` panel shows AI explanation with loading state (`Generating AI explanation...`)
+
+If Gemini is unavailable or not configured, the backend returns a deterministic fallback explanation to keep UX stable.
+
+### Wallet + Router Integration Notes
+
+- Wallet connection now supports injected `window.ethereum` and wagmi wallet clients.
+- Router address is read from `VITE_ROUTER_ADDRESS` first, then `NEXT_PUBLIC_ROUTER_ADDRESS`.
+- Contract status panel displays network, wallet, latest block, and router address.
+- Test transaction now targets the Router contract (not wallet-to-self), so MetaMask shows wallet -> router.
 
 ### IQ AI ADK Note
 
