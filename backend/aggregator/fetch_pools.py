@@ -3,6 +3,7 @@
 import time
 import logging
 import httpx
+from typing import TypedDict
 from config import settings
 
 _cache: dict = {"data": None, "ts": 0}
@@ -39,7 +40,27 @@ MAX_REASONABLE_APY = 200.0
 DROP_OUTLIER_APY = 1000.0
 
 
-async def fetch_all_pools(chain: str | None = None) -> list[dict]:
+class PoolData(TypedDict):
+    pool_id: str
+    protocol: str
+    chain: str
+    token: str
+    tvl: float
+    gross_apy: float
+    reward_apy: float
+    net_apy: float
+    pool_address: str
+    apy: float
+    symbol: str
+    pool_meta: str | None
+    raw_apy: float
+    apy_capped: bool
+    suspicious: bool
+    validation_note: str
+    source: str
+
+
+async def fetch_all_pools(chain: str | None = None) -> list[PoolData]:
     """Fetch and normalize pool data from DefiLlama.
 
     Returns normalized PoolData objects with:
@@ -61,7 +82,7 @@ async def fetch_all_pools(chain: str | None = None) -> list[dict]:
             return _cache[cache_key]
         raise
 
-    pools: list[dict] = []
+    pools: list[PoolData] = []
     for p in raw.get("data", []):
         project = (p.get("project") or "").lower().strip()
         symbol = (p.get("symbol") or "").upper()
