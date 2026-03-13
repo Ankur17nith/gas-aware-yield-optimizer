@@ -19,6 +19,8 @@ export default function AIAgentStrategyPanel({
 }: Props) {
   const [result, setResult] = useState<AiAgentStrategyResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [explanationLoading, setExplanationLoading] = useState(false);
+  const [explanation, setExplanation] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
 
   const seedCurrent = useMemo(() => {
@@ -46,11 +48,39 @@ export default function AIAgentStrategyPanel({
           depositAmount,
           selectedChain
         );
-        if (!cancelled) setResult(data);
+        if (!cancelled) {
+          setResult(data);
+          setExplanation(data.explanation || '');
+        }
+
+        if (!cancelled && !data.explanation && data.recommended) {
+          setExplanationLoading(true);
+          try {
+            const explain = await api.getAiExplainStrategy(
+              data.recommended.protocol,
+              data.recommended.pool_name || data.recommended.pool_meta || 'Pool',
+              data.recommended.token,
+              Number(data.predicted_net_apy_30d || data.recommended.net_apy || data.recommended.apy || 0),
+              Number(data.recommended.tvl || 0),
+              selectedChain,
+              data.confidence
+            );
+            if (!cancelled) {
+              setExplanation(explain.explanation || '');
+            }
+          } catch {
+            if (!cancelled) {
+              setExplanation('Unable to generate AI explanation right now.');
+            }
+          } finally {
+            if (!cancelled) setExplanationLoading(false);
+          }
+        }
       } catch (err: any) {
         if (!cancelled) {
           setError(err?.message || 'Failed to run AI strategy agent');
           setResult(null);
+          setExplanation('');
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -122,6 +152,15 @@ export default function AIAgentStrategyPanel({
                 • {line}
               </div>
             ))}
+          </div>
+
+          <div style={S.reasonBox}>
+            <div style={S.explainTitle}>AI Explanation</div>
+            {explanationLoading ? (
+              <div style={S.reasonLine}>Generating AI explanation...</div>
+            ) : (
+              <div style={S.reasonLine}>{explanation || 'No explanation available yet.'}</div>
+            )}
           </div>
 
           <div style={S.actions}>
@@ -305,6 +344,12 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: 'var(--text-2)',
     lineHeight: 1.5,
+  },
+  explainTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: 'var(--text-1)',
+    marginBottom: 6,
   },
   actions: {
     display: 'flex',

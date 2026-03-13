@@ -35,12 +35,17 @@ export interface AiAgentStrategyResponse {
   predicted_net_apy_30d: number;
   estimated_30d_delta_usd: number;
   reasoning: string[];
+  explanation?: string;
   onchain_trigger?: {
     supported: boolean;
     method?: string;
     status?: string;
   };
   sources?: Record<string, string>;
+}
+
+export interface AiExplainStrategyResponse {
+  explanation: string;
 }
 
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
@@ -190,5 +195,27 @@ export const api = {
     };
     if (chain) params.chain = chain;
     return request<AiAgentStrategyResponse>('/ai-agent/strategy', params);
+  },
+
+  /** Fetch Gemini-generated explanation for selected strategy */
+  getAiExplainStrategy: (
+    protocol: string,
+    pool: string,
+    token: string,
+    apy: number,
+    tvl: number,
+    chain?: string,
+    confidence?: number
+  ) => {
+    const params: Record<string, string> = {
+      protocol,
+      pool,
+      token,
+      apy: apy.toString(),
+      tvl: tvl.toString(),
+    };
+    if (chain) params.chain = chain;
+    if (confidence !== undefined) params.confidence = confidence.toString();
+    return request<AiExplainStrategyResponse>('/ai/explain-strategy', params);
   },
 };

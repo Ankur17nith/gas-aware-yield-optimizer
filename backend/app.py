@@ -15,6 +15,7 @@ from engine.pool_ranker import rank_pools
 from engine.migration_recommender import recommend_migration
 from ai_engine.model_loader import load_model
 from ai_engine.yield_predictor import predict_yields
+from services.gemini_explainer import explain_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -371,6 +372,37 @@ async def portfolio(amount: float = 10000.0, chain: str | None = None):
 
 
 # ──────────────────────────────────────────────
+#  Gemini Strategy Explainer
+# ──────────────────────────────────────────────
+@app.get("/ai/explain-strategy")
+async def ai_explain_strategy(
+    protocol: str,
+    pool: str,
+    token: str,
+    apy: float,
+    tvl: float,
+    chain: str | None = None,
+    confidence: int | None = None,
+):
+    """Generate a human-readable Gemini explanation for a strategy recommendation."""
+    try:
+        explanation = explain_strategy(
+            protocol=protocol,
+            pool=pool,
+            token=token,
+            apy=apy,
+            tvl=tvl,
+            chain=chain,
+            confidence=confidence,
+            reasoning=None,
+        )
+        return {"explanation": explanation}
+    except Exception as exc:
+        logger.exception("/ai/explain-strategy failed")
+        raise HTTPException(status_code=502, detail=f"Failed to generate strategy explanation: {exc}") from exc
+
+
+# ──────────────────────────────────────────────
 #  Autonomous AI Strategy Agent
 # ──────────────────────────────────────────────
 @app.get("/ai-agent/strategy")
@@ -422,6 +454,16 @@ async def ai_agent_strategy(
 
         gas_gwei = float(gas_data.get("standard", 0) or 0)
         reasons = _build_reasoning(current_pool, target_pool, gas_gwei, action)
+        explanation = explain_strategy(
+            protocol=str(target_pool.get("protocol", "Unknown")),
+            pool=str(target_pool.get("pool_name") or target_pool.get("pool_meta") or "Pool"),
+            token=str(target_pool.get("token", "")),
+            apy=projected_target_apy,
+            tvl=float(target_pool.get("tvl", 0) or 0),
+            chain=str(target_pool.get("chain") or chain or ""),
+            confidence=confidence,
+            reasoning=reasons,
+        )
 
         return {
             "agent": {
@@ -436,6 +478,7 @@ async def ai_agent_strategy(
             "predicted_net_apy_30d": projected_target_apy,
             "estimated_30d_delta_usd": expected_delta_30d,
             "reasoning": reasons,
+            "explanation": explanation,
             "onchain_trigger": {
                 "supported": False,
                 "method": "migrateStrategy(address)",
