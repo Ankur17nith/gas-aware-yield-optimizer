@@ -26,6 +26,7 @@ import AIRecommendation from './AIRecommendation';
 import APYHeatmap from './APYHeatmap';
 import ActivityFeed from './ActivityFeed';
 import ContractStatusPanel from './ContractStatusPanel';
+import SourceBadges from './SourceBadges';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
 import { formatUSD, formatAPY, formatCompact } from '../utils/format';
 import {
@@ -405,6 +406,15 @@ export default function Dashboard() {
           {/* ── Dashboard Page ── */}
           {activePage === 'dashboard' && (
             <div style={S.pageGrid}>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <SourceBadges
+                  sources={{
+                    ...(pools.sources || {}),
+                    ...(predictions.sources || {}),
+                  }}
+                />
+              </div>
+
               {/* Portfolio */}
               <div style={{ gridColumn: '1 / -1' }}>
                 <PortfolioOverview pools={filteredPools} depositAmount={depositAmount} connected={wallet.connected} />
@@ -495,6 +505,7 @@ export default function Dashboard() {
           {activePage === 'pools' && (
             <div>
               <PageHeader title="Pool Explorer" sub="Ranked by composite score (net APY + TVL + trust)" />
+              <SourceBadges sources={pools.sources || {}} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
                 <button style={S.refreshBtn} onClick={handleRefresh}>↻ Refresh Data</button>
               </div>
@@ -515,6 +526,7 @@ export default function Dashboard() {
           {activePage === 'predictions' && (
             <div>
               <PageHeader title="AI Predictions" sub="ML-powered yield forecasts with confidence scores" />
+              <SourceBadges sources={predictions.sources || {}} />
               <PredictionChart predictions={predictions.predictions} loading={predictions.loading} />
             </div>
           )}

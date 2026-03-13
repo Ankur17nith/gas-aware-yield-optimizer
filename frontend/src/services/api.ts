@@ -84,12 +84,12 @@ export const api = {
   getNetYield: (amount: number, chain?: string) => {
     const params: Record<string, string> = { amount: amount.toString() };
     if (chain) params.chain = chain;
-    return request<{ pools: any[]; deposit_amount: number }>('/net-yield', params);
+    return request<{ pools: any[]; deposit_amount: number; sources?: Record<string, string> }>('/net-yield', params);
   },
 
   /** Fetch AI predictions */
   getPredictions: (chain?: string) =>
-    request<{ predictions: any[] }>('/predictions', chain ? { chain } : undefined),
+    request<{ predictions: any[]; sources?: Record<string, string> }>('/predictions', chain ? { chain } : undefined),
 
   /** Fetch migration recommendation */
   getMigration: (

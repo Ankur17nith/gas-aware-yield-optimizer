@@ -28,6 +28,16 @@ CHAIN_GAS_MULTIPLIER = {
     "Base": 0.008,       # ~125x cheaper than L1
 }
 
+# Annual protocol fee estimates in basis points
+PROTOCOL_FEE_BPS = {
+    "Aave V3": 10,
+    "Compound V3": 8,
+    "Curve": 20,
+    "Yearn": 50,
+    "Spark": 10,
+    "Morpho Aave": 15,
+}
+
 
 def compute_net_yields(
     pools: list[dict],
@@ -38,7 +48,8 @@ def compute_net_yields(
     """
     For each pool, compute:
     - gas_cost_usd: cost of deposit tx in USD
-    - net_apy:      gross APY minus annualized gas impact
+    - protocol_fee_pct: protocol fee percentage
+    - net_apy:      gross APY minus annualized gas impact minus protocol fee
     - profit_30d:   projected 30-day profit after gas
     """
     eth_price = price_data.get("prices", {}).get("ETH", {}).get("price", 3000.0)
@@ -71,7 +82,11 @@ def compute_net_yields(
         else:
             gas_impact_pct = 0
 
-        net_apy = round(gross_apy - gas_impact_pct, 4)
+        protocol_fee_bps = PROTOCOL_FEE_BPS.get(protocol, 15)
+        protocol_fee_pct = protocol_fee_bps / 100
+
+        # Net APY = Gross APY - Gas Cost Impact - Protocol Fee
+        net_apy = round(gross_apy - gas_impact_pct - protocol_fee_pct, 4)
 
         # 30-day profit projection
         daily_rate = net_apy / 365 / 100
@@ -83,6 +98,8 @@ def compute_net_yields(
                 "gross_apy": gross_apy,
                 "gas_cost_usd": gas_cost_usd,
                 "gas_impact_pct": round(gas_impact_pct, 4),
+                "protocol_fee_bps": protocol_fee_bps,
+                "protocol_fee_pct": round(protocol_fee_pct, 4),
                 "net_apy": net_apy,
                 "profit_30d": profit_30d,
                 "deposit_gas": deposit_gas,

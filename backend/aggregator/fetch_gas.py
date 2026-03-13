@@ -22,6 +22,8 @@ async def get_gas_price() -> dict:
     gas_data = await _fetch_from_etherscan()
     if not gas_data:
         gas_data = await _fetch_from_rpc()
+    if not gas_data:
+        raise RuntimeError("Unable to fetch gas prices from Etherscan or RPC")
 
     _cache["data"] = gas_data
     _cache["ts"] = now
@@ -60,7 +62,7 @@ async def _fetch_from_etherscan() -> dict | None:
         return None
 
 
-async def _fetch_from_rpc() -> dict:
+async def _fetch_from_rpc() -> dict | None:
     """Fallback: fetch gas price via JSON-RPC."""
     payload = {
         "jsonrpc": "2.0",
@@ -85,11 +87,4 @@ async def _fetch_from_rpc() -> dict:
             "source": "rpc",
         }
     except Exception:
-        return {
-            "safe": 15,
-            "standard": 20,
-            "fast": 30,
-            "base_fee": 18,
-            "unit": "gwei",
-            "source": "fallback",
-        }
+        return None

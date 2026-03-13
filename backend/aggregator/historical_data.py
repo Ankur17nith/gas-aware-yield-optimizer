@@ -9,17 +9,18 @@ import time
 import httpx
 from config import settings
 
-_cache: dict = {"data": None, "ts": 0}
+_cache: dict = {}
 
 # Longer cache for historical data (5 minutes)
 HISTORICAL_CACHE_TTL = 300
 
 
-async def get_historical_rates() -> list[dict]:
+async def get_historical_rates(chain: str | None = None) -> list[dict]:
     """Fetch 30-day historical APY for major stablecoin pools."""
     now = time.time()
-    if _cache["data"] and (now - _cache["ts"]) < HISTORICAL_CACHE_TTL:
-        return _cache["data"]
+    cache_key = chain or "all"
+    if _cache.get(cache_key) and (now - _cache.get(f"{cache_key}_ts", 0)) < HISTORICAL_CACHE_TTL:
+        return _cache[cache_key]
 
     # First get pool list to find IDs
     async with httpx.AsyncClient(timeout=15) as client:
@@ -27,7 +28,7 @@ async def get_historical_rates() -> list[dict]:
         resp.raise_for_status()
         raw = resp.json()
 
-    # Find top stablecoin pools on Ethereum
+    # Find top stablecoin pools on requested chain (or all chains)
     target_protocols = {"aave-v3", "compound-v3", "curve-dex", "yearn-finance"}
     target_symbols = {"USDC", "DAI", "USDT"}
     pool_ids: list[dict] = []
@@ -37,7 +38,7 @@ async def get_historical_rates() -> list[dict]:
         symbol = (p.get("symbol") or "").upper()
         chain = (p.get("chain") or "").lower()
 
-        if chain != "ethereum":
+        if chain and chain != (p.get("chain") or "").lower():
             continue
 
         matched_proto = None
@@ -100,6 +101,6 @@ async def get_historical_rates() -> list[dict]:
             except Exception:
                 continue
 
-    _cache["data"] = historical
-    _cache["ts"] = now
+    _cache[cache_key] = historical
+    _cache[f"{cache_key}_ts"] = now
     return historical

@@ -59,7 +59,14 @@ async def pools(chain: str | None = None):
     """Return live pool data from DeFi protocols."""
     try:
         pool_data = await fetch_all_pools(chain)
-        return {"pools": pool_data}
+        return {
+            "pools": pool_data,
+            "sources": {
+                "apy": "DefiLlama",
+                "tvl": "DefiLlama",
+                "pool_list": "DefiLlama",
+            },
+        }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to fetch pools: {exc}") from exc
 
@@ -72,7 +79,12 @@ async def gas():
     """Return current Ethereum gas price."""
     try:
         gas_data = await get_gas_price()
-        return gas_data
+        return {
+            **gas_data,
+            "sources": {
+                "gas": gas_data.get("source", "etherscan/rpc"),
+            },
+        }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to fetch gas data: {exc}") from exc
 
@@ -84,7 +96,12 @@ async def gas():
 async def prices():
     """Return current stablecoin and ETH prices."""
     price_data = await get_token_prices()
-    return price_data
+    return {
+        **price_data,
+        "sources": {
+            "prices": price_data.get("source", "coingecko"),
+        },
+    }
 
 
 # ──────────────────────────────────────────────
@@ -99,7 +116,16 @@ async def net_yield(amount: float = 10000.0, chain: str | None = None):
         price_data = await get_token_prices()
         results = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(results)
-        return {"pools": ranked, "deposit_amount": amount}
+        return {
+            "pools": ranked,
+            "deposit_amount": amount,
+            "sources": {
+                "apy": "DefiLlama",
+                "tvl": "DefiLlama",
+                "prices": price_data.get("source", "coingecko"),
+                "gas": gas_data.get("source", "etherscan/rpc"),
+            },
+        }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to compute net yield: {exc}") from exc
 
@@ -112,10 +138,17 @@ async def predictions(chain: str | None = None):
     """Return AI-predicted yields for the next 30 days."""
     try:
         pool_data = await fetch_all_pools(chain)
-        historical = await get_historical_rates()
+        historical = await get_historical_rates(chain)
         model = app.state.model
         preds = predict_yields(model, pool_data, historical)
-        return {"predictions": preds}
+        return {
+            "predictions": preds,
+            "sources": {
+                "input_pools": "DefiLlama",
+                "historical_apy": "DefiLlama",
+                "model": "local-trained-model",
+            },
+        }
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to generate predictions: {exc}") from exc
 
@@ -136,7 +169,7 @@ async def migration(
     gas_data = await get_gas_price()
     price_data = await get_token_prices()
     net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
-    historical = await get_historical_rates()
+    historical = await get_historical_rates(chain)
     model = app.state.model
     preds = predict_yields(model, pool_data, historical)
 
@@ -167,7 +200,7 @@ async def auto_rebalance(
     gas_data = await get_gas_price()
     price_data = await get_token_prices()
     net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
-    historical = await get_historical_rates()
+    historical = await get_historical_rates(chain)
     model = app.state.model
     preds = predict_yields(model, pool_data, historical)
 
@@ -201,9 +234,9 @@ async def auto_rebalance(
 #  Historical Data
 # ──────────────────────────────────────────────
 @app.get("/historical")
-async def historical():
+async def historical(chain: str | None = None):
     """Return historical yield data for charts."""
-    data = await get_historical_rates()
+    data = await get_historical_rates(chain)
     return {"historical": data}
 
 

@@ -6,6 +6,7 @@ interface PredictionsState {
   predictions: Prediction[];
   loading: boolean;
   error: string | null;
+  sources: Record<string, string>;
 }
 
 export function usePredictions(autoFetch = true, chain?: string) {
@@ -13,6 +14,7 @@ export function usePredictions(autoFetch = true, chain?: string) {
     predictions: [],
     loading: false,
     error: null,
+    sources: {},
   });
 
   const fetchPredictions = useCallback(async (chainOverride?: string) => {
@@ -23,6 +25,7 @@ export function usePredictions(autoFetch = true, chain?: string) {
         predictions: data.predictions,
         loading: false,
         error: null,
+        sources: data.sources || {},
       });
     } catch (err: any) {
       setState((s) => ({

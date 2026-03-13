@@ -23,6 +23,15 @@ PROTOCOL_AGE_YEARS = {
     "Morpho Aave": 2.0,
 }
 
+PROTOCOL_AUDIT_STATUS = {
+    "Aave V3": True,
+    "Compound V3": True,
+    "Curve": True,
+    "Yearn": True,
+    "Spark": True,
+    "Morpho Aave": True,
+}
+
 # Weights for the composite score
 W_NET_APY = 0.55
 W_TVL = 0.20
@@ -94,11 +103,13 @@ def _compute_risk_score(pool: dict) -> tuple[float, str]:
     - Protocol age
     - APY volatility proxy
     - Liquidity depth
+    - Audit status
     """
     protocol = pool.get("protocol", "")
     tvl = float(pool.get("tvl", 0) or 0)
     apy = float(pool.get("apy", 0) or 0)
     age_years = PROTOCOL_AGE_YEARS.get(protocol, 1.0)
+    audited = PROTOCOL_AUDIT_STATUS.get(protocol, False)
 
     # TVL risk: lower TVL => higher risk
     if tvl >= 1_000_000_000:
@@ -142,8 +153,14 @@ def _compute_risk_score(pool: dict) -> tuple[float, str]:
     else:
         liq_risk = 80
 
+    audit_risk = 10 if audited else 60
+
     risk_score = round(
-        0.35 * tvl_risk + 0.20 * age_risk + 0.25 * vol_risk + 0.20 * liq_risk,
+        0.30 * tvl_risk
+        + 0.20 * age_risk
+        + 0.20 * vol_risk
+        + 0.20 * liq_risk
+        + 0.10 * audit_risk,
         2,
     )
 

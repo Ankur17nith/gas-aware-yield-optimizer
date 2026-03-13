@@ -50,6 +50,9 @@ class Settings:
     DEFILLAMA_YIELDS_URL: str = "https://yields.llama.fi/pools"
     DEFILLAMA_PRICES_URL: str = "https://coins.llama.fi/prices/current"
 
+    # ── CoinGecko ──
+    COINGECKO_PRICE_URL: str = "https://api.coingecko.com/api/v3/simple/price"
+
     # ── Etherscan Gas ──
     ETHERSCAN_GAS_URL: str = "https://api.etherscan.io/api"
 

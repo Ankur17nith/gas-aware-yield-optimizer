@@ -7,6 +7,7 @@ interface PoolsState {
   loading: boolean;
   error: string | null;
   depositAmount: number;
+  sources: Record<string, string>;
 }
 
 export function usePools(autoFetch = true, chain?: string) {
@@ -15,6 +16,7 @@ export function usePools(autoFetch = true, chain?: string) {
     loading: false,
     error: null,
     depositAmount: 10000,
+    sources: {},
   });
 
   const fetchPools = useCallback(async (amount: number = 10000, chainOverride?: string) => {
@@ -26,6 +28,7 @@ export function usePools(autoFetch = true, chain?: string) {
         loading: false,
         error: null,
         depositAmount: data.deposit_amount,
+        sources: data.sources || {},
       });
     } catch (err: any) {
       setState((s) => ({
