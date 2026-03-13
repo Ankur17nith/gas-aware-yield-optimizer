@@ -7,6 +7,10 @@ export interface Pool {
   tvl: number;
   chain: string;
   pool_meta: string;
+  raw_apy?: number;
+  apy_capped?: boolean;
+  suspicious?: boolean;
+  validation_note?: string;
   // Computed by net-yield engine
   gross_apy?: number;
   gas_cost_usd?: number;

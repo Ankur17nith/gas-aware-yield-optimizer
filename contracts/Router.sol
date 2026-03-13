@@ -320,6 +320,19 @@ contract Router {
         whenNotPaused
         nonReentrant
     {
+        _migrate(params);
+    }
+
+    /// @notice Alias for migrate() used by some frontends and integrators.
+    function migratePosition(MigrationParams calldata params)
+        external
+        whenNotPaused
+        nonReentrant
+    {
+        _migrate(params);
+    }
+
+    function _migrate(MigrationParams calldata params) internal {
         if (params.amount == 0) revert ZeroAmount();
         if (!supportedTokens[params.token]) revert UnsupportedToken();
         if (params.fromProtocol == params.toProtocol) revert SameProtocol();

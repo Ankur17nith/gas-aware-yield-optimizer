@@ -90,6 +90,8 @@ export default function Dashboard() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
+  const [isMobile, setIsMobile] = useState<boolean>(() => window.innerWidth <= 960);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [autoCompound, setAutoCompound] = useState(false);
   const [autoRebalanceEnabled, setAutoRebalanceEnabled] = useState(false);
   const [gasThreshold, setGasThreshold] = useState(20);
@@ -272,6 +274,18 @@ export default function Dashboard() {
   }, [wallet.connected, wallet.chainId, refreshContractStatus]);
 
   useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 960);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
     if (!autoRebalanceEnabled || !selectedPool) {
       setAutoRebalanceMessage(null);
       return;
@@ -348,6 +362,11 @@ export default function Dashboard() {
       {/* ── Top Header ── */}
       <header style={S.header}>
         <div style={S.headerLeft}>
+          {isMobile && (
+            <button style={S.menuBtn} onClick={() => setSidebarOpen((v) => !v)} aria-label="Toggle menu">
+              {sidebarOpen ? 'Close' : 'Menu'}
+            </button>
+          )}
           <div style={S.logo}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="var(--primary)" /><path d="M7 17l5-10 5 10" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><path d="M9 13h6" stroke="#fff" strokeWidth="2" strokeLinecap="round" /></svg>
             <span style={S.logoText}>YieldOptimizer</span>
@@ -356,22 +375,26 @@ export default function Dashboard() {
         <div style={S.headerRight}>
           <ChainSelector selectedChain={selectedChain} onChainChange={setSelectedChain} />
           <ThemeToggle />
-          <WalletConnect
-            address={wallet.address} connected={wallet.connected}
-            loading={wallet.loading} error={wallet.error}
-            ethBalance={wallet.ethBalance}
-            onConnect={wallet.connect} onDisconnect={wallet.disconnect}
-          />
+          <WalletConnect compact={isMobile} />
         </div>
       </header>
 
       <div style={S.layout}>
         {/* ── Sidebar ── */}
-        <nav style={S.sidebar}>
+        <nav
+          style={{
+            ...S.sidebar,
+            ...(isMobile ? S.sidebarMobile : {}),
+            ...(isMobile && sidebarOpen ? S.sidebarMobileOpen : {}),
+          }}
+        >
           {NAV_ITEMS.map(item => (
             <button
               key={item.key}
-              onClick={() => setActivePage(item.key)}
+              onClick={() => {
+                setActivePage(item.key);
+                if (isMobile) setSidebarOpen(false);
+              }}
               style={activePage === item.key ? S.sideItemActive : S.sideItem}
             >
               <span style={S.sideIcon}>{item.icon}</span>
@@ -383,7 +406,7 @@ export default function Dashboard() {
         </nav>
 
         {/* ── Main Content ── */}
-        <main style={S.content}>
+  <main style={{ ...S.content, ...(isMobile ? S.contentMobile : {}) }}>
           {/* Deposit slider (always visible) */}
           <div style={S.sliderRow}>
             <div style={S.sliderInfo}>
@@ -424,7 +447,8 @@ export default function Dashboard() {
               <div style={{ gridColumn: '1 / -1' }}>
                 <div style={S.statsRow}>
                   {pools.loading ? (
-                    <>
+                        <>
+                          <div style={S.loadingLine}>Aggregating DeFi data...</div>
                       <SkeletonCard /><SkeletonCard /><SkeletonCard /><SkeletonCard />
                     </>
                   ) : (
@@ -509,7 +533,12 @@ export default function Dashboard() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 16 }}>
                 <button style={S.refreshBtn} onClick={handleRefresh}>↻ Refresh Data</button>
               </div>
-              {pools.loading ? <SkeletonTable rows={8} /> : (
+              {pools.loading ? (
+                <>
+                  <div style={S.loadingLine}>Fetching pools...</div>
+                  <SkeletonTable rows={8} />
+                </>
+              ) : (
                 <PoolTable pools={filteredPools} predictions={predictions.predictions}
                   loading={pools.loading} error={pools.error}
                   onMigrate={handleMigrate} onPoolClick={handlePoolClick} />
@@ -662,6 +691,17 @@ const S: Record<string, React.CSSProperties> = {
   },
   headerLeft: { display: 'flex', alignItems: 'center', gap: 16 },
   headerRight: { display: 'flex', alignItems: 'center', gap: 8 },
+  menuBtn: {
+    background: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: '8px 10px',
+    color: 'var(--text-1)',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
   logo: { display: 'flex', alignItems: 'center', gap: 8 },
   logoText: {
     fontSize: 16, fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em',
@@ -678,6 +718,19 @@ const S: Record<string, React.CSSProperties> = {
     background: 'var(--surface)', borderRight: '1px solid var(--border)',
     padding: '16px 8px', display: 'flex', flexDirection: 'column' as const, gap: 2,
     position: 'sticky' as const, top: 49, height: 'calc(100vh - 49px)', overflowY: 'auto' as const,
+  },
+  sidebarMobile: {
+    position: 'fixed',
+    top: 98,
+    left: 0,
+    width: 250,
+    height: 'calc(100vh - 98px)',
+    transform: 'translateX(-105%)',
+    transition: 'transform 0.2s ease',
+    zIndex: 140,
+  },
+  sidebarMobileOpen: {
+    transform: 'translateX(0)',
   },
   sideItem: {
     display: 'flex', alignItems: 'center', gap: 8,
@@ -697,6 +750,9 @@ const S: Record<string, React.CSSProperties> = {
   /* Content */
   content: {
     flex: 1, padding: 32, maxWidth: 1200, minWidth: 0,
+  },
+  contentMobile: {
+    padding: 14,
   },
 
   /* Slider */
@@ -797,5 +853,11 @@ const S: Record<string, React.CSSProperties> = {
     color: 'var(--text-2)',
     fontSize: 12,
     lineHeight: 1.4,
+  },
+  loadingLine: {
+    marginBottom: 12,
+    color: 'var(--text-2)',
+    fontSize: 13,
+    fontWeight: 500,
   },
 };

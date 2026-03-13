@@ -7,6 +7,7 @@ const ROUTER_ABI = [
   'function deposit(uint8 protocol, address token, uint256 amount, bytes extraData) external',
   'function withdraw(uint8 protocol, address token, uint256 amount, bytes extraData) external',
   'function migrate((uint8 fromProtocol, uint8 toProtocol, address token, uint256 amount, uint256 minReceived, bytes extraData) params) external',
+  'function migratePosition((uint8 fromProtocol, uint8 toProtocol, address token, uint256 amount, uint256 minReceived, bytes extraData) params) external',
   'function getSupportedTokens() external view returns (address[])',
   'function getAdapter(uint8 protocol) external view returns (address)',
   'function paused() external view returns (bool)',

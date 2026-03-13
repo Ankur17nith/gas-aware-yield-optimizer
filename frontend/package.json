@@ -9,11 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.10",
+    "@tanstack/react-query": "^5.90.21",
     "ethers": "^6.9.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.0",
-    "recharts": "^2.10.0"
+    "recharts": "^2.10.0",
+    "viem": "^2.47.2",
+    "wagmi": "^3.5.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

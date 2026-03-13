@@ -17,7 +17,7 @@ export async function connectWallet(): Promise<{
   chainId: number;
 }> {
   if (!window.ethereum) {
-    throw new Error('No wallet detected. Please install MetaMask.');
+    throw new Error('No injected wallet detected. Use Connect Wallet to continue.');
   }
 
   provider = new BrowserProvider(window.ethereum);
@@ -28,6 +28,17 @@ export async function connectWallet(): Promise<{
   const chainId = Number(network.chainId);
 
   return { address, chainId };
+}
+
+export async function setWalletClient(walletClient: any | null) {
+  if (!walletClient) {
+    provider = null;
+    signer = null;
+    return;
+  }
+
+  provider = new BrowserProvider(walletClient.transport, 'any');
+  signer = await provider.getSigner(walletClient.account.address);
 }
 
 /**

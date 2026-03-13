@@ -93,7 +93,14 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                     </span>
                   </td>
                   <td style={styles.td}><span style={styles.tokenBadge}>{pool.token}</span></td>
-                  <td style={styles.td}>{formatAPY(pool.gross_apy ?? pool.apy)}</td>
+                  <td style={styles.td}>
+                    <span>{formatAPY(pool.gross_apy ?? pool.apy)}</span>
+                    {pool.apy_capped && (
+                      <span style={styles.warningPill} title={pool.validation_note || 'Suspicious APY capped'}>
+                        capped
+                      </span>
+                    )}
+                  </td>
                   <td style={styles.td}><span style={styles.gasCost}>{formatUSD(pool.gas_cost_usd ?? 0)}</span></td>
                   <td style={styles.td}>
                     <span style={{ ...styles.netApy, color: (pool.net_apy ?? 0) >= (pool.gross_apy ?? pool.apy) ? 'var(--success)' : 'var(--text-1)' }}>
@@ -171,6 +178,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 8px', borderRadius: 4, fontSize: 12, fontWeight: 600,
   },
   gasCost: { color: 'var(--text-2)' },
+  warningPill: {
+    display: 'inline-block',
+    marginLeft: 8,
+    borderRadius: 5,
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+    background: 'rgba(234,179,8,0.18)',
+    color: '#EAB308',
+    padding: '2px 6px',
+  },
   netApy: { fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
   riskBadge: {
     display: 'inline-block',

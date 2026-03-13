@@ -30,6 +30,10 @@ SUPPORTED_CHAINS = {
     "base": "Base",
 }
 
+# APY sanity rules to avoid showing unrealistic values from upstream spikes.
+MAX_REASONABLE_APY = 200.0
+DROP_OUTLIER_APY = 1000.0
+
 
 async def fetch_all_pools(chain: str | None = None) -> list[dict]:
     """Fetch and normalize pool data from DefiLlama.
@@ -85,16 +89,27 @@ async def fetch_all_pools(chain: str | None = None) -> list[dict]:
         if apy is None or tvl is None:
             continue
 
+        raw_apy = float(apy)
+        if raw_apy > DROP_OUTLIER_APY:
+            # Treat extreme values as likely transient data glitches.
+            continue
+        apy_capped = raw_apy > MAX_REASONABLE_APY
+        normalized_apy = min(raw_apy, MAX_REASONABLE_APY)
+
         pools.append(
             {
                 "pool_id": p.get("pool", ""),
                 "protocol": _normalize_protocol(matched_protocol),
                 "token": matched_token,
                 "symbol": symbol,
-                "apy": round(float(apy), 4),
+                "apy": round(normalized_apy, 4),
                 "tvl": round(float(tvl), 2),
                 "chain": SUPPORTED_CHAINS[pool_chain],
                 "pool_meta": p.get("poolMeta", ""),
+                "raw_apy": round(raw_apy, 4),
+                "apy_capped": apy_capped,
+                "suspicious": apy_capped,
+                "validation_note": "APY capped at 200%" if apy_capped else "",
             }
         )
 

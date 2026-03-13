@@ -108,8 +108,12 @@ def _compute_risk_score(pool: dict) -> tuple[float, str]:
     protocol = pool.get("protocol", "")
     tvl = float(pool.get("tvl", 0) or 0)
     apy = float(pool.get("apy", 0) or 0)
+    suspicious = bool(pool.get("suspicious", False))
     age_years = PROTOCOL_AGE_YEARS.get(protocol, 1.0)
     audited = PROTOCOL_AUDIT_STATUS.get(protocol, False)
+
+    if suspicious:
+        return 85.0, "High"
 
     # TVL risk: lower TVL => higher risk
     if tvl >= 1_000_000_000:

@@ -316,15 +316,7 @@ export default function Dashboard() {
         </nav>
         <div style={styles.topBarRight}>
           <ThemeToggle />
-          <WalletConnect
-            address={wallet.address}
-            connected={wallet.connected}
-            loading={wallet.loading}
-            error={wallet.error}
-            ethBalance={wallet.ethBalance}
-            onConnect={wallet.connect}
-            onDisconnect={wallet.disconnect}
-          />
+          <WalletConnect />
         </div>
       </header>
 
