@@ -14,6 +14,7 @@ def recommend_migration(
     predictions: list[dict],
     gas_data: dict,
     price_data: dict,
+    gas_threshold_gwei: float = 20.0,
 ) -> dict:
     """
     Compare the user's current pool against all alternatives.
@@ -118,6 +119,22 @@ def recommend_migration(
         recommendation = "hold"
         reason = "Migration cost exceeds potential yield improvement."
 
+    gas_optimized = gas_gwei <= gas_threshold_gwei
+    if gas_optimized:
+        optimal_gas_window = (
+            f"Gas is favorable at {gas_gwei} gwei (threshold {gas_threshold_gwei} gwei)."
+        )
+    else:
+        optimal_gas_window = (
+            f"Wait for lower gas. Current {gas_gwei} gwei, target <= {gas_threshold_gwei} gwei."
+        )
+
+    auto_rebalance_recommended = (
+        recommendation in {"migrate", "consider"}
+        and best_improvement > (migration_cost_usd / max(amount, 1)) * 100
+        and gas_optimized
+    )
+
     return {
         "recommendation": recommendation,
         "reason": reason,
@@ -128,6 +145,11 @@ def recommend_migration(
         "breakeven_days": breakeven_days,
         "current_profit_30d": current_profit_30d,
         "target_profit_30d": target_profit_30d,
+        "gas_threshold_gwei": gas_threshold_gwei,
+        "current_gas_gwei": gas_gwei,
+        "gas_optimized": gas_optimized,
+        "optimal_gas_window": optimal_gas_window,
+        "auto_rebalance_recommended": auto_rebalance_recommended,
     }
 
 

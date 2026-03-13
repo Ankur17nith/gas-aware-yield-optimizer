@@ -20,5 +20,7 @@ export interface Pool {
   // From ranker
   rank_score?: number;
   trust_score?: number;
+  risk_score?: number;
+  risk_level?: 'Low' | 'Medium' | 'High';
   rank?: number;
 }

@@ -25,10 +25,18 @@ import AutoCompoundToggle from './AutoCompoundToggle';
 import AIRecommendation from './AIRecommendation';
 import APYHeatmap from './APYHeatmap';
 import ActivityFeed from './ActivityFeed';
+import ContractStatusPanel from './ContractStatusPanel';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
 import { formatUSD, formatAPY, formatCompact } from '../utils/format';
-import { deposit as depositOnChain } from '../services/routerContract';
+import {
+  deposit as depositOnChain,
+  withdraw as withdrawOnChain,
+  getContractStatus,
+  testSmartContract,
+} from '../services/routerContract';
+import { api } from '../services/api';
 import type { Pool } from '../types/pool';
+import type { ContractStatus } from '../services/routerContract';
 
 /* ── Constants ── */
 interface TxRecord {
@@ -41,6 +49,7 @@ interface TxRecord {
   timestamp: number;
   txHash: string;
   status: 'success' | 'pending' | 'failed';
+  chainId: number | null;
 }
 
 const PROTOCOL_TO_ID: Record<string, number> = {
@@ -81,6 +90,13 @@ export default function Dashboard() {
   const [selectedPool, setSelectedPool] = useState<Pool | null>(null);
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [autoCompound, setAutoCompound] = useState(false);
+  const [autoRebalanceEnabled, setAutoRebalanceEnabled] = useState(false);
+  const [gasThreshold, setGasThreshold] = useState(20);
+  const [autoRebalanceMessage, setAutoRebalanceMessage] = useState<string | null>(null);
+  const [contractStatus, setContractStatus] = useState<ContractStatus | null>(null);
+  const [contractStatusLoading, setContractStatusLoading] = useState(false);
+  const [contractStatusError, setContractStatusError] = useState<string | null>(null);
+  const [testTxLoading, setTestTxLoading] = useState(false);
   const [detailPool, setDetailPool] = useState<Pool | null>(null);
   const [dwModal, setDwModal] = useState<{ open: boolean; mode: 'deposit' | 'withdraw'; pool: Pool | null }>({
     open: false, mode: 'deposit', pool: null,
@@ -129,6 +145,20 @@ export default function Dashboard() {
     addToast('info', 'Refreshing pool data…');
   }, [pools, predictions, depositAmount, selectedChain, addToast]);
 
+  const refreshContractStatus = useCallback(async () => {
+    if (!wallet.connected) return;
+    setContractStatusLoading(true);
+    setContractStatusError(null);
+    try {
+      const status = await getContractStatus();
+      setContractStatus(status);
+    } catch (err: any) {
+      setContractStatusError(err.message || 'Failed to load contract status');
+    } finally {
+      setContractStatusLoading(false);
+    }
+  }, [wallet.connected]);
+
   const handleSliderChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value) || 1000;
     setDepositAmount(val);
@@ -141,8 +171,8 @@ export default function Dashboard() {
   const handleMigrate = useCallback((pool: Pool) => {
     setSelectedPool(pool);
     setModalOpen(true);
-    migration.fetchRecommendation(pool.protocol, pool.token, depositAmount, selectedChain);
-  }, [migration, depositAmount, selectedChain]);
+    migration.fetchRecommendation(pool.protocol, pool.token, depositAmount, selectedChain, gasThreshold);
+  }, [migration, depositAmount, selectedChain, gasThreshold]);
 
   const handleCloseModal = useCallback(() => {
     setModalOpen(false);
@@ -153,20 +183,10 @@ export default function Dashboard() {
   const handleConfirmMigration = useCallback(async () => {
     if (!migration.recommendation?.target || !selectedPool) return;
     const target = migration.recommendation.target;
-    if (!wallet.connected) {
-      const fakeTxHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-      saveTransaction({
-        id: Date.now().toString(), type: 'migrate',
-        protocol: `${selectedPool.protocol} → ${target.protocol}`,
-        token: selectedPool.token, amount: depositAmount,
-        gasCost: migration.recommendation.migration_cost_usd ?? 0,
-        timestamp: Date.now(), txHash: fakeTxHash, status: 'success',
-      });
-      addToast('success', `Migration simulated: ${selectedPool.protocol} → ${target.protocol}`);
-      handleCloseModal();
-      return;
-    }
     try {
+      if (!wallet.connected) {
+        await wallet.connect();
+      }
       const hash = await migration.executeMigration(
         PROTOCOL_TO_ID[selectedPool.protocol] ?? 0,
         PROTOCOL_TO_ID[target.protocol] ?? 0,
@@ -179,14 +199,15 @@ export default function Dashboard() {
           protocol: `${selectedPool.protocol} → ${target.protocol}`,
           token: selectedPool.token, amount: depositAmount,
           gasCost: migration.recommendation.migration_cost_usd ?? 0,
-          timestamp: Date.now(), txHash: hash, status: 'success',
+          timestamp: Date.now(), txHash: hash, status: 'success', chainId: wallet.chainId,
         });
         addToast('success', 'Migration submitted on-chain!');
+        refreshContractStatus();
       }
     } catch (err: any) {
       addToast('error', err.message || 'Migration failed');
     }
-  }, [migration, selectedPool, depositAmount, wallet.connected, saveTransaction, addToast, handleCloseModal]);
+  }, [migration, selectedPool, depositAmount, wallet, saveTransaction, addToast, refreshContractStatus]);
 
   const handlePoolClick = useCallback((pool: Pool) => { setDetailPool(pool); }, []);
   const handleOpenDeposit = useCallback((pool: Pool) => { setDetailPool(null); setDwModal({ open: true, mode: 'deposit', pool }); }, []);
@@ -197,20 +218,86 @@ export default function Dashboard() {
     const pool = dwModal.pool;
     const mode = dwModal.mode;
     const numAmount = parseFloat(amount) || 0;
-    if (wallet.connected) {
-      const protocolId = PROTOCOL_TO_ID[pool.protocol] ?? 0;
-      const tokenAddr = TOKEN_ADDRESSES[pool.token] ?? '';
-      if (mode === 'deposit') await depositOnChain(protocolId, tokenAddr, amount);
+    if (!wallet.connected) {
+      await wallet.connect();
     }
-    const fakeTxHash = wallet.connected ? '0xpending...'
-      : '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const protocolId = PROTOCOL_TO_ID[pool.protocol] ?? 0;
+    const tokenAddr = TOKEN_ADDRESSES[pool.token] ?? '';
+    const txHash = mode === 'deposit'
+      ? await depositOnChain(protocolId, tokenAddr, amount)
+      : await withdrawOnChain(protocolId, tokenAddr, amount);
+
     saveTransaction({
       id: Date.now().toString(), type: mode, protocol: pool.protocol,
       token: pool.token, amount: numAmount, gasCost: pool.gas_cost_usd ?? 0,
-      timestamp: Date.now(), txHash: fakeTxHash, status: 'success',
+      timestamp: Date.now(), txHash, status: 'success', chainId: wallet.chainId,
     });
-    addToast('success', `${mode === 'deposit' ? 'Deposit' : 'Withdrawal'} of $${numAmount.toLocaleString()} ${pool.token} ${wallet.connected ? 'submitted' : 'simulated'}!`);
-  }, [dwModal, addToast, wallet.connected, saveTransaction]);
+    addToast('success', `${mode === 'deposit' ? 'Deposit' : 'Withdrawal'} submitted on-chain for $${numAmount.toLocaleString()} ${pool.token}!`);
+    refreshContractStatus();
+  }, [dwModal, addToast, wallet, saveTransaction, refreshContractStatus]);
+
+  const handleTestSmartContract = useCallback(async () => {
+    try {
+      if (!wallet.connected) {
+        await wallet.connect();
+      }
+      setTestTxLoading(true);
+      const result = await testSmartContract();
+      saveTransaction({
+        id: Date.now().toString(),
+        type: 'deposit',
+        protocol: 'Router Test Tx',
+        token: 'ETH',
+        amount: 0,
+        gasCost: 0,
+        timestamp: Date.now(),
+        txHash: result.hash,
+        status: result.status === 'success' ? 'success' : 'failed',
+        chainId: wallet.chainId,
+      });
+      addToast('success', `Test tx confirmed. Gas used: ${result.gasUsed}`);
+      refreshContractStatus();
+    } catch (err: any) {
+      addToast('error', err.message || 'Test transaction failed');
+    } finally {
+      setTestTxLoading(false);
+    }
+  }, [wallet, saveTransaction, addToast, refreshContractStatus]);
+
+  useEffect(() => {
+    if (wallet.connected) {
+      refreshContractStatus();
+    }
+  }, [wallet.connected, wallet.chainId, refreshContractStatus]);
+
+  useEffect(() => {
+    if (!autoRebalanceEnabled || !selectedPool) {
+      setAutoRebalanceMessage(null);
+      return;
+    }
+
+    const runCheck = async () => {
+      try {
+        const result = await api.getAutoRebalance(
+          selectedPool.protocol,
+          selectedPool.token,
+          depositAmount,
+          gasThreshold,
+          selectedChain
+        );
+        const rec = result?.recommendation;
+        if (result?.should_rebalance) {
+          setAutoRebalanceMessage(`Auto-rebalance ready: ${rec?.reason || 'higher net APY detected.'}`);
+        } else {
+          setAutoRebalanceMessage(rec?.optimal_gas_window || rec?.reason || 'No rebalance action needed.');
+        }
+      } catch (err: any) {
+        setAutoRebalanceMessage(err.message || 'Auto-rebalance check failed');
+      }
+    };
+
+    runCheck();
+  }, [autoRebalanceEnabled, selectedPool, depositAmount, gasThreshold, selectedChain]);
 
   /* Derived data — backend already filters by chain */
   const filteredPools = pools.pools;
@@ -352,9 +439,47 @@ export default function Dashboard() {
                   setAutoCompound(v => !v);
                   addToast('info', autoCompound ? 'Auto-compound disabled' : 'Auto-compound enabled');
                 }} />
+                <div style={S.autoRebalanceCard}>
+                  <div style={S.autoRebalanceHead}>
+                    <span style={S.autoRebalanceTitle}>Auto Rebalance</span>
+                    <label style={S.switchWrap}>
+                      <input
+                        type="checkbox"
+                        checked={autoRebalanceEnabled}
+                        onChange={() => setAutoRebalanceEnabled(v => !v)}
+                      />
+                    </label>
+                  </div>
+                  <div style={S.autoRebalanceBody}>
+                    <label style={S.gasInputLabel}>Gas Threshold (gwei)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      value={gasThreshold}
+                      onChange={(e) => setGasThreshold(Number(e.target.value) || 20)}
+                      style={S.gasInput}
+                    />
+                    <p style={S.autoRebalanceText}>
+                      {autoRebalanceMessage || 'Enable to recommend migration only when APY delta beats gas cost.'}
+                    </p>
+                  </div>
+                </div>
               </div>
               <div>
                 <ActivityFeed items={activityItems} />
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <ContractStatusPanel
+                  status={contractStatus}
+                  chainId={wallet.chainId}
+                  loading={contractStatusLoading}
+                  error={contractStatusError}
+                  onRefresh={refreshContractStatus}
+                  onTestTransaction={handleTestSmartContract}
+                  txLoading={testTxLoading}
+                />
               </div>
 
               {/* Heatmap */}
@@ -447,6 +572,7 @@ export default function Dashboard() {
       <MigrationModal open={modalOpen} recommendation={migration.recommendation}
         loading={migration.loading} txLoading={migration.txLoading}
         txHash={migration.txHash} error={migration.error}
+        chainId={wallet.chainId}
         onConfirm={handleConfirmMigration} onClose={handleCloseModal} />
 
       {detailPool && (
@@ -610,5 +736,54 @@ const S: Record<string, React.CSSProperties> = {
     background: 'var(--card)', border: '1px solid var(--border)',
     color: 'var(--text-2)', borderRadius: 8, padding: '8px 16px',
     fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+  },
+  autoRebalanceCard: {
+    marginTop: 16,
+    background: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: 12,
+  },
+  autoRebalanceHead: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  autoRebalanceTitle: {
+    color: 'var(--text-1)',
+    fontWeight: 600,
+    fontSize: 13,
+  },
+  switchWrap: {
+    display: 'flex',
+    alignItems: 'center',
+  },
+  autoRebalanceBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 8,
+  },
+  gasInputLabel: {
+    color: 'var(--text-3)',
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    fontWeight: 600,
+  },
+  gasInput: {
+    background: 'var(--surface)',
+    color: 'var(--text-1)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: '8px 10px',
+    fontSize: 13,
+    fontFamily: 'inherit',
+  },
+  autoRebalanceText: {
+    margin: 0,
+    color: 'var(--text-2)',
+    fontSize: 12,
+    lineHeight: 1.4,
   },
 };

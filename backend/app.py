@@ -128,6 +128,7 @@ async def migration(
     current_protocol: str = "aave",
     current_token: str = "USDC",
     amount: float = 10000.0,
+    gas_threshold_gwei: float = 20.0,
     chain: str | None = None,
 ):
     """Get migration recommendation for a user's position."""
@@ -147,8 +148,53 @@ async def migration(
         predictions=preds,
         gas_data=gas_data,
         price_data=price_data,
+        gas_threshold_gwei=gas_threshold_gwei,
     )
     return recommendation
+
+
+@app.get("/auto-rebalance")
+async def auto_rebalance(
+    current_protocol: str = "aave",
+    current_token: str = "USDC",
+    amount: float = 10000.0,
+    gas_threshold_gwei: float = 20.0,
+    trigger: bool = False,
+    chain: str | None = None,
+):
+    """Return auto-rebalance recommendation based on APY delta and gas threshold."""
+    pool_data = await fetch_all_pools(chain)
+    gas_data = await get_gas_price()
+    price_data = await get_token_prices()
+    net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
+    historical = await get_historical_rates()
+    model = app.state.model
+    preds = predict_yields(model, pool_data, historical)
+
+    recommendation = recommend_migration(
+        current_protocol=current_protocol,
+        current_token=current_token,
+        amount=amount,
+        net_yields=net_yields,
+        predictions=preds,
+        gas_data=gas_data,
+        price_data=price_data,
+        gas_threshold_gwei=gas_threshold_gwei,
+    )
+
+    should_rebalance = bool(recommendation.get("auto_rebalance_recommended", False))
+    trigger_status = "not_requested"
+    if trigger and should_rebalance:
+        # This backend is non-custodial: it can recommend, but does not hold user keys.
+        trigger_status = "requires_user_signature"
+
+    return {
+        "enabled": True,
+        "should_rebalance": should_rebalance,
+        "trigger": trigger,
+        "trigger_status": trigger_status,
+        "recommendation": recommendation,
+    }
 
 
 # ──────────────────────────────────────────────

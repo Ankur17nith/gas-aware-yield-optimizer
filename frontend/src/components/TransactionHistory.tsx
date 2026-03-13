@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatUSD } from '../utils/format';
+import { txExplorerUrl } from '../utils/explorer';
 
 interface Transaction {
   id: string;
@@ -11,6 +12,7 @@ interface Transaction {
   timestamp: number;
   txHash: string;
   status: 'success' | 'pending' | 'failed';
+  chainId?: number | null;
 }
 
 interface Props {
@@ -62,13 +64,12 @@ export default function TransactionHistory({ transactions = [], onClear }: Props
           <table style={styles.table}>
             <thead>
               <tr>
-                <th style={styles.th}>Type</th>
+                <th style={styles.th}>Action</th>
                 <th style={styles.th}>Protocol</th>
-                <th style={styles.th}>Token</th>
                 <th style={{ ...styles.th, textAlign: 'right' }}>Amount</th>
-                <th style={{ ...styles.th, textAlign: 'right' }}>Gas</th>
+                <th style={styles.th}>Transaction Hash</th>
                 <th style={styles.th}>Status</th>
-                <th style={styles.th}>Time</th>
+                <th style={styles.th}>Timestamp</th>
               </tr>
             </thead>
             <tbody>
@@ -78,18 +79,24 @@ export default function TransactionHistory({ transactions = [], onClear }: Props
                     {typeIcon(tx.type)} {tx.type}
                   </td>
                   <td style={styles.td}>{tx.protocol}</td>
-                  <td style={styles.td}>{tx.token}</td>
                   <td style={{ ...styles.td, textAlign: 'right' }}>
-                    {formatUSD(tx.amount)}
+                    {formatUSD(tx.amount)} {tx.token}
                   </td>
-                  <td style={{ ...styles.td, textAlign: 'right' }}>
-                    {formatUSD(tx.gasCost)}
+                  <td style={styles.td}>
+                    <a
+                      href={txExplorerUrl(tx.txHash, tx.chainId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={styles.hashLink}
+                    >
+                      {tx.txHash.slice(0, 10)}...{tx.txHash.slice(-8)}
+                    </a>
                   </td>
                   <td style={styles.td}>
                     <span style={statusStyle(tx.status)}>{tx.status}</span>
                   </td>
                   <td style={styles.td}>
-                    {new Date(tx.timestamp).toLocaleDateString()}
+                    {new Date(tx.timestamp).toLocaleString()}
                   </td>
                 </tr>
               ))}
@@ -131,6 +138,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   row: { borderBottom: '1px solid var(--border)' },
   td: { padding: '10px 12px', color: 'var(--text-1)' },
+  hashLink: {
+    color: 'var(--primary)',
+    textDecoration: 'none',
+    fontWeight: 600,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+  },
   clearBtn: {
     background: 'rgba(239,68,68,0.15)',
     color: '#EF4444',

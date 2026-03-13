@@ -18,7 +18,7 @@ interface Props {
   onPoolClick?: (pool: Pool) => void;
 }
 
-type SortKey = 'rank' | 'protocol' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl';
+type SortKey = 'rank' | 'protocol' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score';
 
 export default function PoolTable({ pools, predictions, loading, error, onMigrate, onPoolClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('net_apy');
@@ -35,10 +35,12 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
     arr.sort((a, b) => {
       const av = sortKey === 'protocol' ? a.protocol : sortKey === 'token' ? a.token
         : sortKey === 'gross_apy' ? (a.gross_apy ?? a.apy ?? 0) : sortKey === 'gas_cost_usd' ? (a.gas_cost_usd ?? 0)
-        : sortKey === 'net_apy' ? (a.net_apy ?? a.apy ?? 0) : sortKey === 'tvl' ? (a.tvl ?? 0) : (a.rank ?? 0);
+        : sortKey === 'net_apy' ? (a.net_apy ?? a.apy ?? 0) : sortKey === 'tvl' ? (a.tvl ?? 0)
+        : sortKey === 'risk_score' ? (a.risk_score ?? 0) : (a.rank ?? 0);
       const bv = sortKey === 'protocol' ? b.protocol : sortKey === 'token' ? b.token
         : sortKey === 'gross_apy' ? (b.gross_apy ?? b.apy ?? 0) : sortKey === 'gas_cost_usd' ? (b.gas_cost_usd ?? 0)
-        : sortKey === 'net_apy' ? (b.net_apy ?? b.apy ?? 0) : sortKey === 'tvl' ? (b.tvl ?? 0) : (b.rank ?? 0);
+        : sortKey === 'net_apy' ? (b.net_apy ?? b.apy ?? 0) : sortKey === 'tvl' ? (b.tvl ?? 0)
+        : sortKey === 'risk_score' ? (b.risk_score ?? 0) : (b.rank ?? 0);
       if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
       return ((av as number) - (bv as number)) * dir;
     });
@@ -55,7 +57,7 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
   const cols: { label: string; key: SortKey | '' }[] = [
     { label: '#', key: 'rank' }, { label: 'Protocol', key: 'protocol' }, { label: 'Token', key: 'token' },
     { label: 'Gross APY', key: 'gross_apy' }, { label: 'Gas Cost', key: 'gas_cost_usd' },
-    { label: 'Net APY', key: 'net_apy' }, { label: 'TVL', key: 'tvl' },
+    { label: 'Net APY', key: 'net_apy' }, { label: 'Risk', key: 'risk_score' }, { label: 'TVL', key: 'tvl' },
     { label: 'AI Prediction', key: '' }, { label: '', key: '' },
   ];
 
@@ -96,6 +98,23 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                   <td style={styles.td}>
                     <span style={{ ...styles.netApy, color: (pool.net_apy ?? 0) >= (pool.gross_apy ?? pool.apy) ? 'var(--success)' : 'var(--text-1)' }}>
                       {formatAPY(pool.net_apy ?? pool.apy)}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    <span style={{
+                      ...styles.riskBadge,
+                      background: pool.risk_level === 'Low'
+                        ? 'rgba(34,197,94,0.12)'
+                        : pool.risk_level === 'Medium'
+                          ? 'rgba(234,179,8,0.14)'
+                          : 'rgba(239,68,68,0.12)',
+                      color: pool.risk_level === 'Low'
+                        ? 'var(--success)'
+                        : pool.risk_level === 'Medium'
+                          ? '#EAB308'
+                          : 'var(--danger)',
+                    }}>
+                      {pool.risk_level ?? 'Medium'}
                     </span>
                   </td>
                   <td style={styles.td}>{formatCompact(pool.tvl)}</td>
@@ -153,6 +172,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   gasCost: { color: 'var(--text-2)' },
   netApy: { fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+  riskBadge: {
+    display: 'inline-block',
+    borderRadius: 6,
+    padding: '2px 8px',
+    fontSize: 11,
+    fontWeight: 700,
+  },
   predCell: { display: 'flex', alignItems: 'center', gap: 6 },
   migrateBtn: {
     background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6,

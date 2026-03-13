@@ -8,6 +8,11 @@ export interface MigrationRecommendation {
   breakeven_days?: number;
   current_profit_30d?: number;
   target_profit_30d?: number;
+  gas_threshold_gwei?: number;
+  current_gas_gwei?: number;
+  gas_optimized?: boolean;
+  optimal_gas_window?: string;
+  auto_rebalance_recommended?: boolean;
 }
 
 export interface PoolSummary {

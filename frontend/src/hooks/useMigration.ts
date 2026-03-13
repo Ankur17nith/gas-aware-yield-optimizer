@@ -21,10 +21,16 @@ export function useMigration() {
   });
 
   const fetchRecommendation = useCallback(
-    async (protocol: string, token: string, amount: number, chain?: string) => {
+    async (
+      protocol: string,
+      token: string,
+      amount: number,
+      chain?: string,
+      gasThresholdGwei?: number
+    ) => {
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const data = await api.getMigration(protocol, token, amount, chain);
+        const data = await api.getMigration(protocol, token, amount, chain, gasThresholdGwei);
         setState((s) => ({
           ...s,
           recommendation: data,

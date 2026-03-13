@@ -92,14 +92,39 @@ export const api = {
     request<{ predictions: any[] }>('/predictions', chain ? { chain } : undefined),
 
   /** Fetch migration recommendation */
-  getMigration: (protocol: string, token: string, amount: number, chain?: string) => {
+  getMigration: (
+    protocol: string,
+    token: string,
+    amount: number,
+    chain?: string,
+    gasThresholdGwei?: number
+  ) => {
     const params: Record<string, string> = {
       current_protocol: protocol,
       current_token: token,
       amount: amount.toString(),
     };
+    if (gasThresholdGwei !== undefined) params.gas_threshold_gwei = gasThresholdGwei.toString();
     if (chain) params.chain = chain;
     return request<any>('/migration', params);
+  },
+
+  /** Check auto-rebalance recommendation */
+  getAutoRebalance: (
+    protocol: string,
+    token: string,
+    amount: number,
+    gasThreshold: number,
+    chain?: string
+  ) => {
+    const params: Record<string, string> = {
+      current_protocol: protocol,
+      current_token: token,
+      amount: amount.toString(),
+      gas_threshold_gwei: gasThreshold.toString(),
+    };
+    if (chain) params.chain = chain;
+    return request<any>('/auto-rebalance', params);
   },
 
   /** Fetch historical data for charts */

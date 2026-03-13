@@ -14,10 +14,20 @@ PROTOCOL_TRUST_SCORES = {
     "Morpho Aave": 0.87,
 }
 
+PROTOCOL_AGE_YEARS = {
+    "Aave V3": 5.0,
+    "Compound V3": 4.5,
+    "Curve": 4.5,
+    "Yearn": 4.0,
+    "Spark": 1.5,
+    "Morpho Aave": 2.0,
+}
+
 # Weights for the composite score
 W_NET_APY = 0.55
 W_TVL = 0.20
 W_TRUST = 0.25
+W_RISK = 0.15
 
 
 def rank_pools(pools: list[dict]) -> list[dict]:
@@ -44,11 +54,29 @@ def rank_pools(pools: list[dict]) -> list[dict]:
         norm_tvl = pool.get("tvl", 0) / max_tvl if max_tvl > 0 else 0
         trust = PROTOCOL_TRUST_SCORES.get(pool["protocol"], 0.80)
 
+        risk_score, risk_level = _compute_risk_score(pool)
+
+        # Adjust score by favoring lower risk pools.
+        # risk_score is 0-100 (high = risky), convert to safety_factor (0-1, high = safer)
+        safety_factor = 1 - (risk_score / 100)
+
         score = round(
-            W_NET_APY * norm_apy + W_TVL * norm_tvl + W_TRUST * trust, 4
+            W_NET_APY * norm_apy
+            + W_TVL * norm_tvl
+            + W_TRUST * trust
+            + W_RISK * safety_factor,
+            4,
         )
 
-        ranked.append({**pool, "rank_score": score, "trust_score": trust})
+        ranked.append(
+            {
+                **pool,
+                "rank_score": score,
+                "trust_score": trust,
+                "risk_score": risk_score,
+                "risk_level": risk_level,
+            }
+        )
 
     ranked.sort(key=lambda x: x["rank_score"], reverse=True)
 
@@ -57,3 +85,73 @@ def rank_pools(pools: list[dict]) -> list[dict]:
         pool["rank"] = i + 1
 
     return ranked
+
+
+def _compute_risk_score(pool: dict) -> tuple[float, str]:
+    """
+    Compute a risk score (0-100, higher = riskier) from:
+    - TVL
+    - Protocol age
+    - APY volatility proxy
+    - Liquidity depth
+    """
+    protocol = pool.get("protocol", "")
+    tvl = float(pool.get("tvl", 0) or 0)
+    apy = float(pool.get("apy", 0) or 0)
+    age_years = PROTOCOL_AGE_YEARS.get(protocol, 1.0)
+
+    # TVL risk: lower TVL => higher risk
+    if tvl >= 1_000_000_000:
+        tvl_risk = 10
+    elif tvl >= 100_000_000:
+        tvl_risk = 25
+    elif tvl >= 10_000_000:
+        tvl_risk = 45
+    elif tvl >= 1_000_000:
+        tvl_risk = 65
+    else:
+        tvl_risk = 80
+
+    # Protocol age risk
+    if age_years >= 4:
+        age_risk = 10
+    elif age_years >= 2:
+        age_risk = 30
+    else:
+        age_risk = 55
+
+    # Volatility proxy: very high APY often implies higher risk
+    if apy >= 30:
+        vol_risk = 80
+    elif apy >= 15:
+        vol_risk = 60
+    elif apy >= 8:
+        vol_risk = 40
+    elif apy >= 3:
+        vol_risk = 25
+    else:
+        vol_risk = 15
+
+    # Liquidity depth proxy (re-using TVL buckets with stronger penalty below 10m)
+    if tvl >= 100_000_000:
+        liq_risk = 10
+    elif tvl >= 10_000_000:
+        liq_risk = 35
+    elif tvl >= 1_000_000:
+        liq_risk = 60
+    else:
+        liq_risk = 80
+
+    risk_score = round(
+        0.35 * tvl_risk + 0.20 * age_risk + 0.25 * vol_risk + 0.20 * liq_risk,
+        2,
+    )
+
+    if risk_score < 33:
+        level = "Low"
+    elif risk_score < 66:
+        level = "Medium"
+    else:
+        level = "High"
+
+    return risk_score, level

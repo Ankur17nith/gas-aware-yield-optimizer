@@ -2,6 +2,7 @@ import React from 'react';
 import type { MigrationRecommendation } from '../types/migration';
 import { formatAPY, formatUSD } from '../utils/format';
 import LoadingSpinner from './LoadingSpinner';
+import { txExplorerUrl } from '../utils/explorer';
 
 interface Props {
   open: boolean;
@@ -10,6 +11,7 @@ interface Props {
   txLoading: boolean;
   txHash: string | null;
   error: string | null;
+  chainId?: number | null;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -21,6 +23,7 @@ export default function MigrationModal({
   txLoading,
   txHash,
   error,
+  chainId,
   onConfirm,
   onClose,
 }: Props) {
@@ -57,7 +60,7 @@ export default function MigrationModal({
             <p style={styles.txHash}>
               Tx:{' '}
               <a
-                href={`https://etherscan.io/tx/${txHash}`}
+                href={txExplorerUrl(txHash, chainId)}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={styles.txLink}
@@ -202,6 +205,13 @@ export default function MigrationModal({
                   {formatUSD(rec.current_profit_30d ?? 0)}
                 </span>
               </div>
+            </div>
+
+            <div style={styles.gasWindow}>
+              <span style={styles.gasWindowTitle}>Optimal Gas Window</span>
+              <span style={styles.gasWindowText}>
+                {rec.optimal_gas_window ?? 'No specific gas window recommendation available.'}
+              </span>
             </div>
 
             {/* Error */}
@@ -376,6 +386,28 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: 'var(--text-1)',
     fontVariantNumeric: 'tabular-nums',
+  },
+  gasWindow: {
+    background: 'rgba(91, 140, 255, 0.08)',
+    border: '1px solid rgba(91, 140, 255, 0.28)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  gasWindowTitle: {
+    fontSize: 11,
+    color: 'var(--text-3)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    fontWeight: 600,
+  },
+  gasWindowText: {
+    color: 'var(--text-1)',
+    fontSize: 13,
+    lineHeight: '1.4',
   },
   actions: {
     display: 'flex',
