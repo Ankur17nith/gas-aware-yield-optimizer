@@ -7,10 +7,16 @@ Fallback: Direct RPC eth_gasPrice call.
 """
 
 import time
+import logging
 import httpx
 from config import settings
 
 _cache: dict = {"data": None, "ts": 0}
+logger = logging.getLogger(__name__)
+
+DEFAULT_SAFE_GWEI = 15.0
+DEFAULT_STANDARD_GWEI = 20.0
+DEFAULT_FAST_GWEI = 28.0
 
 
 async def get_gas_price() -> dict:
@@ -21,9 +27,11 @@ async def get_gas_price() -> dict:
 
     gas_data = await _fetch_from_etherscan()
     if not gas_data:
+        logger.warning("Etherscan gas fetch failed; falling back to RPC")
         gas_data = await _fetch_from_rpc()
     if not gas_data:
-        raise RuntimeError("Unable to fetch gas prices from Etherscan or RPC")
+        logger.warning("RPC gas fetch also failed; using default safe fallback gas values")
+        gas_data = _default_gas_fallback()
 
     _cache["data"] = gas_data
     _cache["ts"] = now
@@ -33,6 +41,7 @@ async def get_gas_price() -> dict:
 async def _fetch_from_etherscan() -> dict | None:
     """Fetch gas from Etherscan Gas Oracle."""
     if not settings.ETHERSCAN_API_KEY:
+        logger.warning("ETHERSCAN_API_KEY missing; skipping Etherscan gas fetch")
         return None
 
     params = {
@@ -47,6 +56,7 @@ async def _fetch_from_etherscan() -> dict | None:
             data = resp.json()
 
         if data.get("status") != "1":
+            logger.warning("Etherscan returned non-success gas response: %s", data)
             return None
 
         result = data["result"]
@@ -58,7 +68,8 @@ async def _fetch_from_etherscan() -> dict | None:
             "unit": "gwei",
             "source": "etherscan",
         }
-    except Exception:
+    except Exception as exc:
+        logger.exception("Etherscan gas fetch exception: %s", exc)
         return None
 
 
@@ -86,5 +97,17 @@ async def _fetch_from_rpc() -> dict | None:
             "unit": "gwei",
             "source": "rpc",
         }
-    except Exception:
+    except Exception as exc:
+        logger.exception("RPC gas fetch exception: %s", exc)
         return None
+
+
+def _default_gas_fallback() -> dict:
+    return {
+        "safe": DEFAULT_SAFE_GWEI,
+        "standard": DEFAULT_STANDARD_GWEI,
+        "fast": DEFAULT_FAST_GWEI,
+        "base_fee": DEFAULT_STANDARD_GWEI,
+        "unit": "gwei",
+        "source": "default_fallback",
+    }

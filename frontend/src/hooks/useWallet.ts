@@ -27,13 +27,23 @@ export function useWallet() {
     setWalletClient(walletClient ?? null);
   }, [walletClient]);
 
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    /android|iphone|ipad|ipod|iemobile|opera mini/i.test(navigator.userAgent);
+
   const connect = useCallback(async () => {
-    const connector = connectors.find((c) => c.type === 'injected') || connectors[0];
+    const connector = isMobile
+      ? connectors.find(
+          (c) =>
+            c.id.toLowerCase().includes('walletconnect') ||
+            c.name.toLowerCase().includes('walletconnect')
+        ) || connectors[0]
+      : connectors.find((c) => c.type === 'injected') || connectors[0];
     if (!connector) {
       throw new Error('No wallet connector available.');
     }
     await connectAsync({ connector });
-  }, [connectAsync, connectors]);
+  }, [connectAsync, connectors, isMobile]);
 
   const disconnect = useCallback(async () => {
     await disconnectAsync();

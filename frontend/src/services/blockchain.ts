@@ -1,34 +1,7 @@
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
 let provider: BrowserProvider | null = null;
 let signer: JsonRpcSigner | null = null;
-
-/**
- * Connect to MetaMask or any injected wallet.
- */
-export async function connectWallet(): Promise<{
-  address: string;
-  chainId: number;
-}> {
-  if (!window.ethereum) {
-    throw new Error('No injected wallet detected. Use Connect Wallet to continue.');
-  }
-
-  provider = new BrowserProvider(window.ethereum);
-  await provider.send('eth_requestAccounts', []);
-  signer = await provider.getSigner();
-  const address = await signer.getAddress();
-  const network = await provider.getNetwork();
-  const chainId = Number(network.chainId);
-
-  return { address, chainId };
-}
 
 export async function setWalletClient(walletClient: any | null) {
   if (!walletClient) {
@@ -72,19 +45,4 @@ export async function getETHBalance(): Promise<string> {
   const balance = await provider.getBalance(address);
   // Convert from wei to ETH, keep 4 decimal places
   return (Number(balance) / 1e18).toFixed(4);
-}
-
-/**
- * Listen for account/chain changes.
- */
-export function onAccountChange(callback: (accounts: string[]) => void) {
-  if (window.ethereum) {
-    window.ethereum.on('accountsChanged', callback);
-  }
-}
-
-export function onChainChange(callback: (chainId: string) => void) {
-  if (window.ethereum) {
-    window.ethereum.on('chainChanged', callback);
-  }
 }

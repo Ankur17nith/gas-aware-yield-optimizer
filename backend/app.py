@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
 import uvicorn
 
 from config import settings
@@ -13,6 +14,8 @@ from engine.pool_ranker import rank_pools
 from engine.migration_recommender import recommend_migration
 from ai_engine.model_loader import load_model
 from ai_engine.yield_predictor import predict_yields
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -68,6 +71,7 @@ async def pools(chain: str | None = None):
             },
         }
     except Exception as exc:
+        logger.exception("/pools failed")
         raise HTTPException(status_code=502, detail=f"Failed to fetch pools: {exc}") from exc
 
 
@@ -86,6 +90,7 @@ async def gas():
             },
         }
     except Exception as exc:
+        logger.exception("/gas failed")
         raise HTTPException(status_code=502, detail=f"Failed to fetch gas data: {exc}") from exc
 
 
@@ -127,6 +132,7 @@ async def net_yield(amount: float = 10000.0, chain: str | None = None):
             },
         }
     except Exception as exc:
+        logger.exception("/net-yield failed")
         raise HTTPException(status_code=502, detail=f"Failed to compute net yield: {exc}") from exc
 
 
@@ -150,6 +156,7 @@ async def predictions(chain: str | None = None):
             },
         }
     except Exception as exc:
+        logger.exception("/predictions failed")
         raise HTTPException(status_code=502, detail=f"Failed to generate predictions: {exc}") from exc
 
 
@@ -246,12 +253,16 @@ async def historical(chain: str | None = None):
 @app.get("/leaderboard")
 async def leaderboard(amount: float = 10000.0, limit: int = 10, chain: str | None = None):
     """Return top pools ranked by net APY."""
-    pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
-    price_data = await get_token_prices()
-    results = compute_net_yields(pool_data, gas_data, price_data, amount)
-    ranked = rank_pools(results)
-    return {"pools": ranked[:limit], "total": len(ranked)}
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        results = compute_net_yields(pool_data, gas_data, price_data, amount)
+        ranked = rank_pools(results)
+        return {"pools": ranked[:limit], "total": len(ranked)}
+    except Exception as exc:
+        logger.exception("/leaderboard failed")
+        raise HTTPException(status_code=502, detail=f"Failed to build leaderboard: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
@@ -260,20 +271,24 @@ async def leaderboard(amount: float = 10000.0, limit: int = 10, chain: str | Non
 @app.get("/stats")
 async def stats(chain: str | None = None):
     """Return aggregate platform stats."""
-    pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
-    total_tvl = sum(p.get("tvlUsd", 0) for p in pool_data)
-    best_apy = max((p.get("apy", 0) for p in pool_data), default=0)
-    protocols = len(set(p.get("project", "") for p in pool_data))
-    tokens = len(set(p.get("symbol", "") for p in pool_data))
-    return {
-        "total_tvl": total_tvl,
-        "best_apy": best_apy,
-        "protocols": protocols,
-        "tokens": tokens,
-        "pools_count": len(pool_data),
-        "gas": gas_data,
-    }
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        total_tvl = sum(float(p.get("tvl", 0) or 0) for p in pool_data)
+        best_apy = max((float(p.get("apy", 0) or 0) for p in pool_data), default=0)
+        protocols = len(set(p.get("protocol", "") for p in pool_data))
+        tokens = len(set(p.get("token", "") for p in pool_data))
+        return {
+            "total_tvl": total_tvl,
+            "best_apy": best_apy,
+            "protocols": protocols,
+            "tokens": tokens,
+            "pools_count": len(pool_data),
+            "gas": gas_data,
+        }
+    except Exception as exc:
+        logger.exception("/stats failed")
+        raise HTTPException(status_code=502, detail=f"Failed to compute stats: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
@@ -282,20 +297,24 @@ async def stats(chain: str | None = None):
 @app.get("/portfolio")
 async def portfolio(amount: float = 10000.0, chain: str | None = None):
     """Simulate portfolio allocation across top pools."""
-    pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
-    price_data = await get_token_prices()
-    results = compute_net_yields(pool_data, gas_data, price_data, amount)
-    ranked = rank_pools(results)
-    top = ranked[0] if ranked else None
-    avg_apy = sum(p.get("net_apy", p.get("apy", 0)) for p in ranked) / max(len(ranked), 1)
-    return {
-        "deposit_amount": amount,
-        "best_pool": top,
-        "avg_net_apy": round(avg_apy, 4),
-        "estimated_30d": round(amount * (avg_apy / 100) * (30 / 365), 2) if avg_apy else 0,
-        "pools_count": len(ranked),
-    }
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        results = compute_net_yields(pool_data, gas_data, price_data, amount)
+        ranked = rank_pools(results)
+        top = ranked[0] if ranked else None
+        avg_apy = sum(p.get("net_apy", p.get("apy", 0)) for p in ranked) / max(len(ranked), 1)
+        return {
+            "deposit_amount": amount,
+            "best_pool": top,
+            "avg_net_apy": round(avg_apy, 4),
+            "estimated_30d": round(amount * (avg_apy / 100) * (30 / 365), 2) if avg_apy else 0,
+            "pools_count": len(ranked),
+        }
+    except Exception as exc:
+        logger.exception("/portfolio failed")
+        raise HTTPException(status_code=502, detail=f"Failed to compute portfolio: {exc}") from exc
 
 
 if __name__ == "__main__":

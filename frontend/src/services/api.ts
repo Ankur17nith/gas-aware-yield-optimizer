@@ -42,6 +42,10 @@ async function request<T>(endpoint: string, params?: Record<string, string>): Pr
 
       if (!res.ok) {
         const body = await res.text();
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          await sleep(RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
         throw new Error(`API Error ${res.status} from ${url.pathname}: ${body || 'Unknown backend error'}`);
       }
 
@@ -65,7 +69,7 @@ async function request<T>(endpoint: string, params?: Record<string, string>): Pr
 
   const message = lastNetworkError instanceof Error ? lastNetworkError.message : 'Network request failed';
   throw new Error(
-    `Unable to reach API at ${BASE_URL}: ${message}. The backend may be waking up on Render; please retry in a few seconds.`
+    `Unable to fetch data. Retrying was attempted, but backend is still unreachable at ${BASE_URL}: ${message}`
   );
 }
 

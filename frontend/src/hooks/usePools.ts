@@ -34,7 +34,7 @@ export function usePools(autoFetch = true, chain?: string) {
       setState((s) => ({
         ...s,
         loading: false,
-        error: err.message || 'Failed to fetch pools',
+        error: err.message || 'Unable to fetch data. Retrying...',
       }));
     }
   }, [chain]);

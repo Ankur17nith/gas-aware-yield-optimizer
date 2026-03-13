@@ -17,7 +17,7 @@
     "react-router-dom": "^6.21.0",
     "recharts": "^2.10.0",
     "viem": "^2.47.2",
-    "wagmi": "^3.5.0"
+    "wagmi": "^2.19.5"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",

@@ -41,7 +41,7 @@ export function useMigration() {
         setState((s) => ({
           ...s,
           loading: false,
-          error: err.message || 'Failed to fetch migration data',
+          error: err.message || 'Unable to fetch data. Retrying...',
         }));
       }
     },

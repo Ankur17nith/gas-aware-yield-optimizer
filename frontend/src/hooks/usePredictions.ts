@@ -31,7 +31,7 @@ export function usePredictions(autoFetch = true, chain?: string) {
       setState((s) => ({
         ...s,
         loading: false,
-        error: err.message || 'Failed to fetch predictions',
+        error: err.message || 'Unable to fetch data. Retrying...',
       }));
     }
   }, [chain]);
