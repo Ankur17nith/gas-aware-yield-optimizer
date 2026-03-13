@@ -76,7 +76,7 @@ async function request<T>(endpoint: string, params?: Record<string, string>): Pr
 export const api = {
   /** Fetch live pool data */
   getPools: (chain?: string) =>
-    request<{ pools: any[] }>('/pools', chain ? { chain } : undefined),
+    request<{ pools: any[]; sources?: Record<string, string> }>('/pools', chain ? { chain } : undefined),
 
   /** Fetch current gas prices */
   getGas: () => request<any>('/gas'),

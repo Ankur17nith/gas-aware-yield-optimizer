@@ -22,12 +22,12 @@ export function usePools(autoFetch = true, chain?: string) {
   const fetchPools = useCallback(async (amount: number = 10000, chainOverride?: string) => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const data = await api.getNetYield(amount, chainOverride ?? chain);
+      const data = await api.getPools(chainOverride ?? chain);
       setState({
         pools: data.pools,
         loading: false,
         error: null,
-        depositAmount: data.deposit_amount,
+        depositAmount: amount,
         sources: data.sources || {},
       });
     } catch (err: any) {

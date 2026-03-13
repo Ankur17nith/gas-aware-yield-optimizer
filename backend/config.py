@@ -34,7 +34,7 @@ class Settings:
     COINGECKO_API_KEY: str = os.getenv("COINGECKO_API_KEY", "")
 
     # ── Cache ──
-    CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "45"))
+    CACHE_TTL_SECONDS: int = int(os.getenv("CACHE_TTL_SECONDS", "300"))
 
     # ── AI Model ──
     MODEL_PATH: str = os.getenv("MODEL_PATH", "ai_engine/models/yield_model.pkl")
