@@ -1,5 +1,12 @@
 const PROD_API_URL = 'https://gas-aware-yield-optimizer.onrender.com';
 
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1200;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function getApiBaseUrl(): string {
   const configuredUrl = import.meta.env.VITE_API_URL?.trim();
   if (configuredUrl) {
@@ -24,24 +31,42 @@ async function request<T>(endpoint: string, params?: Record<string, string>): Pr
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
 
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network request failed';
-    throw new Error(`Unable to reach API at ${BASE_URL}: ${message}`);
+  let lastNetworkError: unknown = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        headers: {
+          Accept: 'application/json',
+        },
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(`API Error ${res.status} from ${url.pathname}: ${body || 'Unknown backend error'}`);
+      }
+
+      return res.json();
+    } catch (error) {
+      lastNetworkError = error;
+      const isLastAttempt = attempt === MAX_RETRIES;
+      const isHttpError = error instanceof Error && error.message.startsWith('API Error');
+
+      if (isHttpError || isLastAttempt) {
+        break;
+      }
+
+      await sleep(RETRY_DELAY_MS * (attempt + 1));
+    }
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`API Error ${res.status} from ${url.pathname}: ${body || 'Unknown backend error'}`);
+  if (lastNetworkError instanceof Error && lastNetworkError.message.startsWith('API Error')) {
+    throw lastNetworkError;
   }
 
-  return res.json();
+  const message = lastNetworkError instanceof Error ? lastNetworkError.message : 'Network request failed';
+  throw new Error(
+    `Unable to reach API at ${BASE_URL}: ${message}. The backend may be waking up on Render; please retry in a few seconds.`
+  );
 }
 
 export const api = {
