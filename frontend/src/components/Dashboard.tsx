@@ -22,7 +22,6 @@ import ChainSelector from './ChainSelector';
 import HowItWorks from './HowItWorks';
 import AlertSettings from './AlertSettings';
 import AutoCompoundToggle from './AutoCompoundToggle';
-import AIRecommendation from './AIRecommendation';
 import AIAgentStrategyPanel from './AIAgentStrategyPanel';
 import APYHeatmap from './APYHeatmap';
 import ActivityFeed from './ActivityFeed';
@@ -472,11 +471,6 @@ export default function Dashboard() {
                     </>
                   )}
                 </div>
-              </div>
-
-              {/* AI Recommendation */}
-              <div style={{ gridColumn: '1 / -1' }}>
-                <AIRecommendation pools={filteredPools} depositAmount={depositAmount} />
               </div>
 
               {/* Autonomous AI Agent Strategy */}

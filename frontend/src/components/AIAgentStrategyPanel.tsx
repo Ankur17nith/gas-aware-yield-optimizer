@@ -92,6 +92,17 @@ export default function AIAgentStrategyPanel({
             <PoolMini title="Recommended Target" pool={result.recommended} highlight />
           </div>
 
+          <div style={S.decisionRow}>
+            <div style={S.decisionBox}>
+              <span style={S.mutedSmall}>Migration Decision</span>
+              <span style={S.decisionValue}>{result.action.toUpperCase()}</span>
+            </div>
+            <div style={S.decisionBox}>
+              <span style={S.mutedSmall}>Migration Probability</span>
+              <span style={S.decisionValue}>{result.confidence}%</span>
+            </div>
+          </div>
+
           <div style={S.stats}>
             <Stat label="Predicted 30d APY" value={formatAPY(result.predicted_net_apy_30d)} />
             <Stat
@@ -248,6 +259,26 @@ const S: Record<string, React.CSSProperties> = {
     gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
     gap: 8,
     marginBottom: 12,
+  },
+  decisionRow: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+    gap: 8,
+    marginBottom: 12,
+  },
+  decisionBox: {
+    background: 'var(--surface)',
+    border: '1px solid var(--border)',
+    borderRadius: 10,
+    padding: '8px 10px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 3,
+  },
+  decisionValue: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: 'var(--text-1)',
   },
   stat: {
     background: 'var(--surface)',
