@@ -13,13 +13,14 @@ interface Props {
   pools: Pool[];
   predictions: Prediction[];
   loading: boolean;
+  error?: string | null;
   onMigrate: (pool: Pool) => void;
   onPoolClick?: (pool: Pool) => void;
 }
 
 type SortKey = 'rank' | 'protocol' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl';
 
-export default function PoolTable({ pools, predictions, loading, onMigrate, onPoolClick }: Props) {
+export default function PoolTable({ pools, predictions, loading, error, onMigrate, onPoolClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('net_apy');
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -45,7 +46,7 @@ export default function PoolTable({ pools, predictions, loading, onMigrate, onPo
   }, [pools, sortKey, sortAsc]);
 
   if (!pools.length && !loading) {
-    return <div style={styles.empty}>No pools found. Check your backend connection.</div>;
+    return <div style={styles.empty}>{error || 'No pools found. Check your backend connection.'}</div>;
   }
 
   const predMap = new Map<string, Prediction>();

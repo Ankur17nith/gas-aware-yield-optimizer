@@ -375,7 +375,8 @@ export default function Dashboard() {
               </div>
               {pools.loading ? <SkeletonTable rows={8} /> : (
                 <PoolTable pools={filteredPools} predictions={predictions.predictions}
-                  loading={pools.loading} onMigrate={handleMigrate} onPoolClick={handlePoolClick} />
+                  loading={pools.loading} error={pools.error}
+                  onMigrate={handleMigrate} onPoolClick={handlePoolClick} />
               )}
               {predictions.predictions.length > 0 && !pools.loading && (
                 <div style={{ marginTop: 24 }}>

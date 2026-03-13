@@ -1,16 +1,46 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const PROD_API_URL = 'https://gas-aware-yield-optimizer.onrender.com';
+
+function getApiBaseUrl(): string {
+  const configuredUrl = import.meta.env.VITE_API_URL?.trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')) {
+    return PROD_API_URL;
+  }
+
+  return '/api';
+}
+
+const BASE_URL = getApiBaseUrl();
 
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
-  const url = new URL(`${BASE_URL}${endpoint}`, window.location.origin);
+  const isAbsoluteBase = /^https?:\/\//.test(BASE_URL);
+  const url = isAbsoluteBase
+    ? new URL(`${BASE_URL}${endpoint}`)
+    : new URL(`${BASE_URL}${endpoint}`, window.location.origin);
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
 
-  const res = await fetch(url.toString());
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), {
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    throw new Error(`Unable to reach API at ${BASE_URL}: ${message}`);
+  }
+
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`API Error ${res.status}: ${body}`);
+    throw new Error(`API Error ${res.status} from ${url.pathname}: ${body || 'Unknown backend error'}`);
   }
+
   return res.json();
 }
 

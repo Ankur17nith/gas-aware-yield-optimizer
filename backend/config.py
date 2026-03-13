@@ -4,14 +4,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _parse_cors_origins() -> list[str]:
+    raw_origins = os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:5173,http://localhost:3000,https://gas-aware-yield-optimizer.vercel.app",
+    )
+    return [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+
 class Settings:
     # ── Server ──
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8000"))
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
-    CORS_ORIGINS: list[str] = os.getenv(
-        "CORS_ORIGINS", "http://localhost:5173,http://localhost:3000"
-    ).split(",")
+    CORS_ORIGINS: list[str] = _parse_cors_origins()
 
     # ── Blockchain ──
     RPC_URL: str = os.getenv("RPC_URL", "https://eth.llamarpc.com")

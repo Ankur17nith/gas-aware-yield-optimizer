@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import uvicorn
@@ -40,6 +40,11 @@ app.add_middleware(
 # ──────────────────────────────────────────────
 #  Health
 # ──────────────────────────────────────────────
+@app.get("/")
+async def root():
+    return {"status": "Gas Aware Yield Optimizer API running"}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -51,8 +56,11 @@ async def health():
 @app.get("/pools")
 async def pools(chain: str | None = None):
     """Return live pool data from DeFi protocols."""
-    pool_data = await fetch_all_pools(chain)
-    return {"pools": pool_data}
+    try:
+        pool_data = await fetch_all_pools(chain)
+        return {"pools": pool_data}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch pools: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
@@ -61,8 +69,11 @@ async def pools(chain: str | None = None):
 @app.get("/gas")
 async def gas():
     """Return current Ethereum gas price."""
-    gas_data = await get_gas_price()
-    return gas_data
+    try:
+        gas_data = await get_gas_price()
+        return gas_data
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch gas data: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
@@ -81,12 +92,15 @@ async def prices():
 @app.get("/net-yield")
 async def net_yield(amount: float = 10000.0, chain: str | None = None):
     """Calculate net APY after gas costs for all pools."""
-    pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
-    price_data = await get_token_prices()
-    results = compute_net_yields(pool_data, gas_data, price_data, amount)
-    ranked = rank_pools(results)
-    return {"pools": ranked, "deposit_amount": amount}
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        results = compute_net_yields(pool_data, gas_data, price_data, amount)
+        ranked = rank_pools(results)
+        return {"pools": ranked, "deposit_amount": amount}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to compute net yield: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
@@ -95,11 +109,14 @@ async def net_yield(amount: float = 10000.0, chain: str | None = None):
 @app.get("/predictions")
 async def predictions(chain: str | None = None):
     """Return AI-predicted yields for the next 30 days."""
-    pool_data = await fetch_all_pools(chain)
-    historical = await get_historical_rates()
-    model = app.state.model
-    preds = predict_yields(model, pool_data, historical)
-    return {"predictions": preds}
+    try:
+        pool_data = await fetch_all_pools(chain)
+        historical = await get_historical_rates()
+        model = app.state.model
+        preds = predict_yields(model, pool_data, historical)
+        return {"predictions": preds}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Failed to generate predictions: {exc}") from exc
 
 
 # ──────────────────────────────────────────────
