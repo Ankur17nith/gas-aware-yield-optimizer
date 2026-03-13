@@ -1,5 +1,5 @@
 import { Contract, formatUnits, parseUnits } from 'ethers';
-import { getProvider, getSigner } from './blockchain';
+import { ensureWalletProvider, ensureWalletSigner, getProvider, getSigner } from './blockchain';
 import type { MigrationParams } from '../types/migration';
 
 // Router ABI (minimal — only the functions we call from the frontend)
@@ -35,7 +35,9 @@ function isAddressLike(value: string): boolean {
 }
 
 function readRuntimeRouterAddress(): string {
-  const envAddress = normalizeAddress(import.meta.env.VITE_ROUTER_ADDRESS || '');
+  const envAddress = normalizeAddress(
+    import.meta.env.VITE_ROUTER_ADDRESS || import.meta.env.NEXT_PUBLIC_ROUTER_ADDRESS || ''
+  );
   if (isAddressLike(envAddress)) return envAddress;
 
   if (typeof window !== 'undefined') {
@@ -69,6 +71,7 @@ export function clearRuntimeRouterAddress(): void {
 export interface ContractStatus {
   network: string;
   chainId: number;
+  walletAddress: string | null;
   contractAddress: string;
   latestBlock: number;
   lastTransactionHash: string | null;
@@ -83,17 +86,15 @@ export interface ContractStatus {
 
 let lastTransactionHash: string | null = null;
 
-function getRouterContract(): Contract {
-  const signer = getSigner();
-  if (!signer) throw new Error('Wallet not connected');
+async function getRouterContract(): Promise<Contract> {
+  const signer = await ensureWalletSigner();
   const routerAddress = getRuntimeRouterAddress();
   if (!routerAddress) throw new Error('Router address not configured');
   return new Contract(routerAddress, ROUTER_ABI, signer);
 }
 
-function getTokenContract(tokenAddress: string): Contract {
-  const signer = getSigner();
-  if (!signer) throw new Error('Wallet not connected');
+async function getTokenContract(tokenAddress: string): Promise<Contract> {
+  const signer = await ensureWalletSigner();
   return new Contract(tokenAddress, ERC20_ABI, signer);
 }
 
@@ -107,7 +108,7 @@ export async function approveToken(
 ): Promise<string> {
   const routerAddress = getRuntimeRouterAddress();
   if (!routerAddress) throw new Error('Router address not configured');
-  const token = getTokenContract(tokenAddress);
+  const token = await getTokenContract(tokenAddress);
   const amountWei = parseUnits(amount, decimals);
   const tx = await token.approve(routerAddress, amountWei);
   const receipt = await tx.wait();
@@ -123,7 +124,7 @@ export async function deposit(
   amount: string,
   decimals: number = 6
 ): Promise<string> {
-  const router = getRouterContract();
+  const router = await getRouterContract();
   const amountWei = parseUnits(amount, decimals);
   const tx = await router.deposit(protocol, tokenAddress, amountWei, '0x');
   const receipt = await tx.wait();
@@ -140,7 +141,7 @@ export async function withdraw(
   amount: string,
   decimals: number = 6
 ): Promise<string> {
-  const router = getRouterContract();
+  const router = await getRouterContract();
   const amountWei = parseUnits(amount, decimals);
   const tx = await router.withdraw(protocol, tokenAddress, amountWei, '0x');
   const receipt = await tx.wait();
@@ -152,7 +153,7 @@ export async function withdraw(
  * Migrate funds between protocols via the Router.
  */
 export async function migrate(params: MigrationParams): Promise<string> {
-  const router = getRouterContract();
+  const router = await getRouterContract();
   const tx = await router.migrate({
     fromProtocol: params.fromProtocol,
     toProtocol: params.toProtocol,
@@ -170,7 +171,7 @@ export async function migrate(params: MigrationParams): Promise<string> {
  * Rebalance funds between protocols via the Router.
  */
 export async function rebalance(params: MigrationParams): Promise<string> {
-  const router = getRouterContract();
+  const router = await getRouterContract();
   const tx = await router.rebalance({
     fromProtocol: params.fromProtocol,
     toProtocol: params.toProtocol,
@@ -195,14 +196,16 @@ export async function migratePosition(params: MigrationParams): Promise<string> 
  * Send a minimal on-chain transaction to verify wallet/network/chain execution.
  */
 export async function testSmartContract(): Promise<{ hash: string; status: string; gasUsed: string }> {
-  const signer = getSigner();
-  if (!signer) throw new Error('Wallet not connected');
+  const signer = await ensureWalletSigner();
+  const routerAddress = getRuntimeRouterAddress();
+  if (!routerAddress) throw new Error('Router address not configured');
 
-  const to = await signer.getAddress();
+  // Send a low-risk transaction to the Router contract itself so MetaMask shows wallet -> router.
+  const router = new Contract(routerAddress, ROUTER_ABI, signer);
   const tx = await signer.sendTransaction({
-    to,
+    to: routerAddress,
     value: 0n,
-    data: '0x',
+    data: router.interface.encodeFunctionData('feeBps', []),
   });
   const receipt = await tx.wait();
   if (!receipt) {
@@ -224,15 +227,14 @@ export async function getTokenBalance(
   tokenAddress: string,
   walletAddress: string
 ): Promise<string> {
-  const token = getTokenContract(tokenAddress);
+  const token = await getTokenContract(tokenAddress);
   const decimals = await token.decimals();
   const balance = await token.balanceOf(walletAddress);
   return (Number(balance) / 10 ** Number(decimals)).toFixed(2);
 }
 
 export async function getContractStatus(walletAddress?: string | null): Promise<ContractStatus> {
-  const provider = getProvider();
-  if (!provider) throw new Error('Wallet provider not connected');
+  const provider = getProvider() ?? (await ensureWalletProvider());
   const routerAddress = getRuntimeRouterAddress();
   if (!routerAddress) throw new Error('Router address not configured');
 
@@ -265,6 +267,7 @@ export async function getContractStatus(walletAddress?: string | null): Promise<
   return {
     network: network.name,
     chainId: Number(network.chainId),
+    walletAddress: user,
     contractAddress: routerAddress,
     latestBlock,
     lastTransactionHash,

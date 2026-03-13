@@ -80,6 +80,7 @@ export default function ContractStatusPanel({
 
       <div style={styles.grid}>
         <div style={styles.item}><span style={styles.label}>Network</span><span style={styles.value}>{status?.network || '—'}</span></div>
+        <div style={styles.item}><span style={styles.label}>Wallet</span><span style={styles.value}>{status?.walletAddress ? `${status.walletAddress.slice(0, 6)}...${status.walletAddress.slice(-4)}` : 'Not connected'}</span></div>
         <div style={styles.item}><span style={styles.label}>Latest Block</span><span style={styles.value}>{status?.latestBlock?.toLocaleString() || '—'}</span></div>
         <div style={styles.item}>
           <span style={styles.label}>Contract Address</span>

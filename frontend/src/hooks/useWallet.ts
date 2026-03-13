@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useCallback } from 'react';
 import { useAccount, useBalance, useChainId, useConnect, useDisconnect, useWalletClient } from 'wagmi';
 import { formatUnits } from 'viem';
-import { setWalletClient } from '../services/blockchain';
+import { connectWallet, setWalletClient } from '../services/blockchain';
 
 interface WalletState {
   address: string | null;
@@ -43,6 +43,11 @@ export function useWallet() {
       throw new Error('No wallet connector available.');
     }
     await connectAsync({ connector });
+
+    const injected = typeof window !== 'undefined' && Boolean((window as Window & { ethereum?: unknown }).ethereum);
+    if (injected && !isMobile) {
+      await connectWallet();
+    }
   }, [connectAsync, connectors, isMobile]);
 
   const disconnect = useCallback(async () => {
