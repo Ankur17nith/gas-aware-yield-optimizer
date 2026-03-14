@@ -1,5 +1,6 @@
 import logging
 import json
+import re
 from typing import Sequence
 
 try:
@@ -134,6 +135,133 @@ def _fallback_chat_answer(user_message: str) -> str:
     )
 
 
+def _is_recommendation_request(message: str) -> bool:
+    text = (message or "").strip().lower()
+    if not text:
+        return False
+
+    explicit_phrases = [
+        "which pool should i use",
+        "what pool is best",
+        "best pool for",
+        "should i migrate",
+        "which protocol has the best yield",
+        "which pool should i migrate to",
+        "what is the best pool",
+        "recommend a pool",
+    ]
+    if any(phrase in text for phrase in explicit_phrases):
+        return True
+
+    # Allow concise recommendation intents like "best usdc pool".
+    if re.search(r"\b(best|recommend|migrate)\b", text) and re.search(
+        r"\b(pool|protocol|apy|yield|usdc|usdt|dai|frax)\b", text
+    ):
+        return True
+
+    return False
+
+
+def _classify_question_type(message: str) -> str:
+    text = (message or "").strip().lower()
+    if not text:
+        return "educational"
+    if _is_recommendation_request(text):
+        return "strategy"
+    if re.search(r"\b(this platform|dashboard|how do you calculate|net apy|risk level|gas impact)\b", text):
+        return "platform"
+    if re.search(
+        r"\b(ethereum|bitcoin|blockchain|smart contract|wallet|private key|public key|layer 2|l2|consensus|defi)\b",
+        text,
+    ):
+        return "blockchain"
+    return "educational"
+
+
+def _fallback_non_strategy_answer(user_message: str, question_type: str) -> dict:
+    text = (user_message or "").strip().lower()
+
+    if question_type == "platform":
+        if "net apy" in text:
+            answer = (
+                "Net APY is your realistic return after costs. In this platform, we estimate it as:\n"
+                "Net APY = Gross APY - Gas Impact - Protocol Fees.\n\n"
+                "Example: if Gross APY is 8.0%, Gas Impact is 0.4%, and fees are 0.2%, Net APY is 7.4%.\n\n"
+                "This helps you compare pools based on what you may actually keep, not headline APY."
+            )
+        elif "risk" in text:
+            answer = (
+                "Risk level is a simple way to show how uncertain a pool may be.\n\n"
+                "Low risk usually means deeper liquidity and more stable behavior. High risk can mean bigger APY swings, lower liquidity, or newer protocols.\n\n"
+                "Risk affects strategy because a slightly lower APY with lower risk can be safer for beginners."
+            )
+        else:
+            answer = (
+                "This platform compares DeFi pools using live data, then adjusts returns for costs.\n\n"
+                "Definition: it is a gas-aware yield optimizer, so it focuses on net APY rather than only gross APY.\n"
+                "Example: a pool with lower gross APY can still win if gas costs are much lower.\n\n"
+                "This helps users make clearer migration decisions with real trading friction included."
+            )
+    elif question_type == "blockchain":
+        if "smart contract" in text:
+            answer = (
+                "A smart contract is code on a blockchain that runs automatically when conditions are met.\n\n"
+                "Example: when you deposit USDC into a lending pool, the contract tracks your deposit and yield rules.\n\n"
+                "In DeFi strategies, smart contracts remove middlemen, but bugs in code are still a risk."
+            )
+        elif "ethereum" in text:
+            answer = (
+                "Ethereum is a blockchain where apps and smart contracts run.\n\n"
+                "Example: many DeFi protocols like lending and liquidity pools are built on Ethereum or its Layer-2 networks.\n\n"
+                "For strategy decisions, Ethereum often has deep liquidity, but gas fees can be higher than some alternatives."
+            )
+        else:
+            answer = (
+                "Blockchain is a shared digital ledger that many computers maintain together.\n\n"
+                "Example: instead of one bank database, transaction history is verified by a network.\n\n"
+                "In DeFi, this allows open financial apps, but users must manage wallet and smart-contract risks carefully."
+            )
+    else:
+        if "apy" in text:
+            answer = (
+                "APY means Annual Percentage Yield, which is your estimated yearly return.\n\n"
+                "Example: a 10% APY on $1,000 suggests about $100 over a year if rates stayed stable.\n\n"
+                "In DeFi strategies, net APY matters more because gas and fees can reduce actual returns."
+            )
+        elif "tvl" in text:
+            answer = (
+                "TVL means Total Value Locked, or how much money is deposited in a protocol or pool.\n\n"
+                "Example: a pool with $200M TVL usually has deeper liquidity than one with $200K.\n\n"
+                "For strategy decisions, higher TVL can reduce slippage and improve execution confidence."
+            )
+        elif "gas" in text:
+            answer = (
+                "Gas fee is the transaction cost you pay on blockchain networks.\n\n"
+                "Example: if migration costs $25 in gas, a small APY gain may not be worth it.\n\n"
+                "Gas affects DeFi strategy because frequent moves can eat into your net yield."
+            )
+        elif "liquidity" in text or "pool" in text:
+            answer = (
+                "A DeFi pool is a smart-contract vault where users deposit tokens so others can borrow, swap, or trade.\n\n"
+                "Example: a USDC lending pool pays depositors yield from borrower interest.\n\n"
+                "Pool quality affects strategy through APY, TVL, risk, and gas-adjusted net returns."
+            )
+        else:
+            answer = _fallback_chat_answer(user_message)
+
+    return {
+        "answer": answer,
+        "recommended_pool": None,
+        "reason": "Educational response mode: no pool recommendation requested.",
+        "risk": "DeFi has smart-contract, liquidity, and market risks. Returns are not guaranteed.",
+        "gas_impact": "Gas is a real cost and should be included when comparing yields.",
+        "notes": [
+            "Ask a strategy question like 'which pool should I use?' if you want a recommendation.",
+        ],
+        "question_type": question_type,
+    }
+
+
 def chat_with_gemini(
     user_message: str,
     pool_context: dict | None = None,
@@ -143,6 +271,8 @@ def chat_with_gemini(
     """Return a concise, data-grounded response for DeFi copilot chat assistant."""
     context_obj = pool_context or {}
     pools = context_obj.get("pools", []) if isinstance(context_obj, dict) else []
+    question_type = _classify_question_type(user_message)
+    should_recommend = question_type == "strategy"
 
     def _context_top_pool() -> dict:
         if not isinstance(pools, list) or not pools:
@@ -156,6 +286,9 @@ def chat_with_gemini(
             return pools[0] if pools else {}
 
     def _fallback_structured() -> dict:
+        if not should_recommend:
+            return _fallback_non_strategy_answer(user_message, question_type)
+
         top = _context_top_pool()
         if top:
             protocol = str(top.get("protocol", "Unknown"))
@@ -191,6 +324,7 @@ def chat_with_gemini(
                     "This response uses live pool context from the backend.",
                     "No profit is guaranteed; yields and gas can change quickly.",
                 ],
+                "question_type": question_type,
             }
 
         return {
@@ -202,6 +336,7 @@ def chat_with_gemini(
             "notes": [
                 "Try refreshing data and asking again for pool-specific guidance.",
             ],
+            "question_type": question_type,
         }
 
     model = _get_model()
@@ -209,18 +344,30 @@ def chat_with_gemini(
         return _fallback_structured()
 
     prompt = f"""
-You are YieldOptimizer DeFi Strategy Copilot.
+You are a beginner-friendly DeFi and blockchain copilot inside Gas-Aware Yield Optimizer.
 
-You MUST answer using only the provided live pool context.
-Do NOT invent pools, APY, TVL, gas impact, migration data, or strategy output.
-If specific data is missing, say it is unavailable.
+CRITICAL RULE:
+- Recommend pools ONLY when user explicitly asks for recommendation/strategy (question_type = strategy).
+- For all other question types, explain concepts. Do not recommend specific pools.
 
-Style rules:
-- Keep answer short (max 140 words).
-- Explain in simple English for non-technical users.
+Question type detected by backend: {question_type}
+
+Question types and behavior:
+1) educational: explain clearly with this structure -> Definition, Example, How it affects DeFi strategy.
+2) platform: explain using platform logic and formulas when relevant.
+   Example formula: Net APY = Gross APY - Gas Impact - Protocol Fees.
+3) strategy: use only provided live pool context and return recommendation fields.
+4) blockchain: explain core blockchain concepts in simple language.
+
+Data safety:
+- Use only the provided context.
+- Do NOT invent pools, APY, TVL, gas impact, or migration values.
+- If data is missing, clearly say unavailable.
 - Never guarantee profits.
-- If user asks for financial advice, provide educational guidance and risk caveat.
-- If useful, provide 2-4 practical steps.
+
+Style:
+- Short paragraphs, simple language for beginners.
+- Avoid jargon unless needed, and explain it.
 
 Return STRICT JSON only with keys:
 answer,
@@ -228,7 +375,12 @@ recommended_pool (object or null with keys: protocol,pool,token,net_apy,tvl,risk
 reason,
 risk,
 gas_impact,
-notes (array of short strings)
+notes (array of short strings),
+question_type
+
+Rules for recommended_pool:
+- If question_type is strategy: choose best option from context and fill recommended_pool.
+- Otherwise: recommended_pool must be null.
 
 Context:
 - Active chain: {chain or 'unknown'}
@@ -246,6 +398,10 @@ User question:
             try:
                 parsed = json.loads(text)
                 if isinstance(parsed, dict) and isinstance(parsed.get("answer"), str):
+                    if parsed.get("question_type") != question_type:
+                        parsed["question_type"] = question_type
+                    if not should_recommend:
+                        parsed["recommended_pool"] = None
                     return parsed
             except Exception:
                 pass
@@ -257,6 +413,10 @@ User question:
                 try:
                     parsed = json.loads(text[start : end + 1])
                     if isinstance(parsed, dict) and isinstance(parsed.get("answer"), str):
+                        if parsed.get("question_type") != question_type:
+                            parsed["question_type"] = question_type
+                        if not should_recommend:
+                            parsed["recommended_pool"] = None
                         return parsed
                 except Exception:
                     pass

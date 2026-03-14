@@ -20,10 +20,10 @@ interface Props {
 }
 
 const QUICK_QUESTIONS = [
-  'What is net APY in simple words?',
-  'Should I migrate now or hold?',
-  'How does gas affect my return?',
-  'What does risk level mean?',
+  'What is APY in simple words?',
+  'What is a DeFi pool?',
+  'How does this platform calculate net APY?',
+  'What is a smart contract?',
 ];
 
 export default function BeginnerChatWidget({ selectedChain, depositAmount }: Props) {
@@ -34,7 +34,7 @@ export default function BeginnerChatWidget({ selectedChain, depositAmount }: Pro
     {
       id: 'welcome',
       role: 'assistant',
-      text: 'Hi! I am your Yield Assistant. Ask me beginner DeFi questions and I will explain in simple language.',
+      text: 'Hi! I am your DeFi Copilot. Ask about pools, APY, gas fees, migration logic, risks, protocols, or blockchain basics.',
     },
   ]);
 
@@ -106,7 +106,7 @@ export default function BeginnerChatWidget({ selectedChain, depositAmount }: Pro
           <div style={S.head}>
             <div>
               <div style={S.title}>Beginner DeFi Assistant</div>
-              <div style={S.sub}>Powered by Gemini</div>
+              <div style={S.sub}>General DeFi Copilot (Powered by Gemini)</div>
             </div>
             <button style={S.iconBtn} onClick={() => setOpen(false)} aria-label="Close chat">
               ×

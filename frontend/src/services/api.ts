@@ -50,6 +50,7 @@ export interface AiExplainStrategyResponse {
 
 export interface AiChatResponse {
   answer: string;
+  question_type?: 'educational' | 'platform' | 'strategy' | 'blockchain';
   recommended_pool?: {
     protocol?: string;
     pool?: string;
