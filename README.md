@@ -8,6 +8,7 @@ A full-stack DeFi application that helps users maximize yield on stablecoins (US
 - **AI Yield Predictions** — ML model predicts 30-day forward yields with confidence intervals
 - **Smart Migration** — One-click migration between protocols with break-even analysis
 - **Autonomous Strategy Agent** — IQ-style decision engine for migrate/consider/hold actions
+- **ADK-TS Core Agent** — Autonomous strategy execution powered by `@iqai/adk`
 - **Gemini AI Explanations** — Generates plain-language reasoning for recommended strategies
 - **Multi-Protocol Support** — Aave V3, Curve, Compound V3, Yearn, Spark, Morpho
 - **Live Data** — Real-time data from DefiLlama, Etherscan, and on-chain sources
@@ -55,6 +56,8 @@ yield-optimizer/
 
 ## Quick Start
 
+Prerequisite: Node.js 22+ (required by `@iqai/adk`).
+
 ### 1. Install Dependencies
 
 ```bash
@@ -85,6 +88,8 @@ Required keys:
 - `DEPLOYER_PRIVATE_KEY` — Deployer private key for Hardhat networks
 - `VITE_ROUTER_ADDRESS` — Router contract address used by frontend
 - `GEMINI_API_KEY` — Google Gemini API key for AI explanation generation
+- `GOOGLE_API_KEY` — Required by ADK-TS model runtime (can reuse `GEMINI_API_KEY`)
+- `ADK_MODEL` — Optional ADK model override (default `gemini-2.5-flash`)
 
 ### 3. Run the Backend
 
@@ -135,11 +140,18 @@ npx hardhat run scripts/deploy.ts --network localhost
 
 ## Autonomous Agent Architecture
 
-- TypeScript strategy module: `agents/yieldStrategyAgent.ts`
-- Backend strategy execution endpoint: `GET /ai-agent/strategy`
+- ADK-TS workflow runner: `agents/adkYieldWorkflow.mjs`
+- Backend ADK-wired strategy endpoint: `GET /ai-agent/strategy`
 - Frontend dashboard panel: `Autonomous Strategy Agent`
 
-The strategy agent consumes live pools, gas, and pricing inputs, scores candidate stablecoin pools with risk/liquidity adjustments, and outputs an action (`migrate`, `consider`, `hold`) with confidence and reasoning.
+The strategy agent consumes live pools, gas, and pricing inputs through ADK tools, reasons over candidate stablecoin pools, and outputs an action (`migrate`, `consider`, `hold`) with confidence, reasoning, and transaction-planning context.
+
+### ADK-TS Compliance Proof
+
+- NPM dependency: `@iqai/adk` (root package)
+- CLI runner command: `npm run agent:strategy -- --current_protocol aave --current_token USDC --amount 10000 --chain ethereum`
+- Backend endpoint uses ADK runner first and falls back only if ADK runtime is unavailable.
+- ADK tools integrate external systems by fetching live `/net-yield`, `/gas`, and `/prices` snapshots.
 
 ### Gemini AI Layer
 
@@ -159,7 +171,7 @@ If Gemini is unavailable or not configured, the backend returns a deterministic 
 
 ### IQ AI ADK Note
 
-The package name `@iqai/agent-kit` is not currently available on the public npm registry. This implementation uses an **iqai-compatible-fallback** architecture so the agent remains production-ready and can be swapped to the official SDK once the package coordinates are available.
+This project now uses the official ADK-TS package (`@iqai/adk`) as the core autonomous agent framework.
 
 ## Smart Contract Security
 

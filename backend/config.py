@@ -40,6 +40,8 @@ class Settings:
     MODEL_PATH: str = os.getenv("MODEL_PATH", "ai_engine/models/yield_model.pkl")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+    ADK_MODEL: str = os.getenv("ADK_MODEL", "gemini-2.5-flash")
+    ADK_API_BASE_URL: str = os.getenv("ADK_API_BASE_URL", "")
 
     # ── Stablecoin addresses (Ethereum mainnet) ──
     STABLECOINS: dict[str, str] = {

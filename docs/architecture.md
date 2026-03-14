@@ -86,6 +86,7 @@
 
 **Services Module** — External AI integrations:
 - Gemini strategy explanation service (`services/gemini_explainer.py`)
+- ADK-TS strategy runner integration (`agents/adkYieldWorkflow.mjs`)
 - Deterministic fallback explanation if Gemini is unavailable
 
 #### 3. Frontend (`frontend/`)
@@ -129,6 +130,8 @@
 | GET | `/ai-agent/strategy` | Autonomous strategy recommendation |
 | GET | `/ai/explain-strategy` | Gemini explanation endpoint |
 | GET | `/historical` | Historical APY payload |
+
+The `/ai-agent/strategy` route executes an ADK-TS workflow first (tool-based reasoning with live external data) and uses an internal deterministic fallback only when ADK runtime execution fails.
 
 ### Wallet + Router Reliability
 

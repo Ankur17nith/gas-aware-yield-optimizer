@@ -3,6 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 import math
+import json
+import os
+import subprocess
+from pathlib import Path
 import uvicorn
 
 from config import settings
@@ -18,6 +22,74 @@ from ai_engine.yield_predictor import predict_yields
 from services.gemini_explainer import explain_strategy
 
 logger = logging.getLogger(__name__)
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
+def _run_adk_strategy(
+    current_protocol: str,
+    current_token: str,
+    amount: float,
+    chain: str | None,
+) -> dict | None:
+    """Execute the ADK-TS strategy runner and return parsed JSON response."""
+    agent_script = ROOT_DIR / "agents" / "adkYieldWorkflow.mjs"
+    if not agent_script.exists():
+        logger.warning("ADK strategy script not found at %s", agent_script)
+        return None
+
+    payload = {
+        "currentProtocol": current_protocol,
+        "currentToken": current_token,
+        "amountUsd": amount,
+        "chain": chain or "ethereum",
+        "apiBaseUrl": settings.ADK_API_BASE_URL or f"http://127.0.0.1:{settings.PORT}",
+    }
+
+    cmd = ["node", str(agent_script), "--input", json.dumps(payload)]
+    env = os.environ.copy()
+    if settings.GEMINI_API_KEY and not env.get("GOOGLE_API_KEY"):
+        env["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
+    env.setdefault("ADK_MODEL", settings.ADK_MODEL)
+
+    try:
+        run = subprocess.run(
+            cmd,
+            cwd=str(ROOT_DIR),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=65,
+            check=False,
+        )
+    except Exception as exc:
+        logger.warning("ADK strategy subprocess failed to execute: %s", exc)
+        return None
+
+    if run.returncode != 0:
+        logger.warning("ADK strategy exited non-zero: %s", (run.stderr or "").strip())
+        return None
+
+    out = (run.stdout or "").strip()
+    if not out:
+        logger.warning("ADK strategy returned empty stdout")
+        return None
+
+    last_line = out.splitlines()[-1]
+    try:
+        parsed = json.loads(last_line)
+        if isinstance(parsed, dict):
+            runtime_status = str(
+                ((parsed.get("meta") or {}).get("runtime_status") or "").strip().lower()
+            )
+            if runtime_status and runtime_status != "ok":
+                logger.warning("ADK strategy runtime degraded (%s), using fallback", runtime_status)
+                return None
+            return parsed
+    except Exception as exc:
+        logger.warning("ADK strategy output parse failure: %s", exc)
+
+    return None
 
 
 def _pool_net_apy(pool: dict) -> float:
@@ -414,6 +486,22 @@ async def ai_agent_strategy(
 ):
     """Return autonomous strategy recommendation for stablecoin reallocation."""
     try:
+        adk_response = _run_adk_strategy(current_protocol, current_token, amount, chain)
+        if adk_response:
+            if not adk_response.get("explanation"):
+                recommended = adk_response.get("recommended") or {}
+                adk_response["explanation"] = explain_strategy(
+                    protocol=str(recommended.get("protocol", "Unknown")),
+                    pool=str(recommended.get("pool_name") or recommended.get("pool_meta") or "Pool"),
+                    token=str(recommended.get("token", "")),
+                    apy=float(adk_response.get("predicted_net_apy_30d", 0) or 0),
+                    tvl=float(recommended.get("tvl", 0) or 0),
+                    chain=str(recommended.get("chain") or chain or ""),
+                    confidence=int(adk_response.get("confidence", 0) or 0),
+                    reasoning=adk_response.get("reasoning") if isinstance(adk_response.get("reasoning"), list) else None,
+                )
+            return adk_response
+
         pool_data = await fetch_all_pools(chain)
         gas_data = await get_gas_price()
         price_data = await get_token_prices()
@@ -468,7 +556,7 @@ async def ai_agent_strategy(
         return {
             "agent": {
                 "name": "IQ Yield Strategy Agent",
-                "framework": "iqai-compatible-fallback",
+                "framework": "internal-fallback-no-adk",
                 "mode": "autonomous",
             },
             "action": action,
