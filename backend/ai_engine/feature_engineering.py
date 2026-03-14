@@ -7,12 +7,15 @@ yield prediction model.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
 
-def build_features(pool_data: list[dict[str, Any]], historical: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_features(
+    pool_data: Sequence[Mapping[str, Any]],
+    historical: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     """
     For each pool, extract features from its historical data:
     - mean APY over the window

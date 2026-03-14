@@ -7,6 +7,8 @@ and annualizes the gas cost impact.
 Supports multi-chain gas pricing (L2s are much cheaper).
 """
 
+from typing import Any, Mapping, Sequence
+
 # Gas units for different operations (estimated)
 GAS_ESTIMATES = {
     "Aave": {"approve": 55_000, "deposit": 250_000, "withdraw": 200_000},
@@ -40,11 +42,11 @@ PROTOCOL_FEE_BPS = {
 
 
 def compute_net_yields(
-    pools: list[dict],
-    gas_data: dict,
-    price_data: dict,
+    pools: Sequence[Mapping[str, Any]],
+    gas_data: Mapping[str, Any],
+    price_data: Mapping[str, Any],
     deposit_amount: float,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """
     For each pool, compute:
     - gas_cost_usd: cost of deposit tx in USD
@@ -55,7 +57,7 @@ def compute_net_yields(
     eth_price = price_data.get("prices", {}).get("ETH", {}).get("price", 3000.0)
     gas_gwei = gas_data.get("standard", 20)
 
-    results = []
+    results: list[dict[str, Any]] = []
     for pool in pools:
         protocol = pool["protocol"]
         gross_apy = pool["apy"]

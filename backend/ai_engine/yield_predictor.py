@@ -6,14 +6,16 @@ Uses the trained model to predict 30-day forward APY for each pool.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 from ai_engine.feature_engineering import build_features
 
 
 def predict_yields(
-    model: Any, pool_data: list[dict[str, Any]], historical: list[dict[str, Any]]
+    model: Any,
+    pool_data: Sequence[Mapping[str, Any]],
+    historical: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
     """
     Predict 30-day forward APY for each pool.
@@ -86,7 +88,7 @@ def predict_yields(
     return predictions
 
 
-def _fallback_predictions(pool_data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _fallback_predictions(pool_data: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Simple fallback when no model is available."""
     return [
         {
