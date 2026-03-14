@@ -646,7 +646,7 @@ export default function Dashboard() {
         onConfirm={handleDwConfirm}
         onClose={() => setDwModal({ open: false, mode: 'deposit', pool: null })} />
 
-      <BeginnerChatWidget selectedChain={selectedChain} />
+      <BeginnerChatWidget selectedChain={selectedChain} depositAmount={depositAmount} />
     </div>
   );
 }

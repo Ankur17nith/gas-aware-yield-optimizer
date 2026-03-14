@@ -49,7 +49,24 @@ export interface AiExplainStrategyResponse {
 }
 
 export interface AiChatResponse {
-  reply: string;
+  answer: string;
+  recommended_pool?: {
+    protocol?: string;
+    pool?: string;
+    token?: string;
+    net_apy?: number;
+    tvl?: number;
+    risk?: string;
+    gas_impact?: number;
+  } | null;
+  reason?: string;
+  risk?: string;
+  gas_impact?: string;
+  notes?: string[];
+  context_used?: {
+    pools_count?: number;
+    chain?: string;
+  };
 }
 
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
@@ -275,10 +292,36 @@ export const api = {
   },
 
   /** Chat with beginner-friendly Gemini assistant */
-  chatWithAssistant: (message: string, chain?: string, context?: string) =>
+  chatWithAssistant: (
+    message: string,
+    chain?: string,
+    context?: string,
+    amount?: number,
+    currentProtocol?: string,
+    currentToken?: string
+  ) =>
     postRequest<AiChatResponse>('/ai/chat', {
       message,
       chain,
       context,
+      amount,
+      current_protocol: currentProtocol,
+      current_token: currentToken,
     }),
+
+  /** Fetch real-time assistant grounding context for debug/demo visibility */
+  getAssistantContext: (
+    amount: number,
+    chain?: string,
+    currentProtocol: string = 'aave',
+    currentToken: string = 'USDC'
+  ) => {
+    const params: Record<string, string> = {
+      amount: amount.toString(),
+      current_protocol: currentProtocol,
+      current_token: currentToken,
+    };
+    if (chain) params.chain = chain;
+    return request<any>('/assistant/context', params);
+  },
 };

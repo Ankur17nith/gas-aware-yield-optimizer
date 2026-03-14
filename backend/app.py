@@ -31,6 +31,95 @@ class AiChatRequest(BaseModel):
     message: str
     chain: str | None = None
     context: str | None = None
+    amount: float = 10000.0
+    current_protocol: str = "aave"
+    current_token: str = "USDC"
+
+
+async def _build_assistant_context(
+    amount: float,
+    chain: str | None,
+    current_protocol: str,
+    current_token: str,
+    pool_limit: int = 15,
+) -> dict:
+    pool_data = await fetch_all_pools(chain)
+    gas_data = await get_gas_price()
+    price_data = await get_token_prices()
+    net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
+    ranked = rank_pools(net_yields)
+
+    migration = recommend_migration(
+        current_protocol=current_protocol,
+        current_token=current_token,
+        amount=amount,
+        net_yields=net_yields,
+        predictions=[],
+        gas_data=gas_data,
+        price_data=price_data,
+        gas_threshold_gwei=20.0,
+    )
+
+    stable_ranked = [
+        p
+        for p in ranked
+        if str(p.get("token", "")).upper() in {"USDC", "USDT", "DAI", "FRAX"}
+    ]
+    top_strategy_pool = stable_ranked[0] if stable_ranked else (ranked[0] if ranked else None)
+
+    pool_items: list[dict] = []
+    for p in ranked[:pool_limit]:
+        pool_items.append(
+            {
+                "protocol": p.get("protocol", ""),
+                "pool": p.get("pool_name") or p.get("pool_meta") or p.get("pool_id", ""),
+                "token": p.get("token", ""),
+                "gross_apy": round(float(p.get("gross_apy", p.get("apy", 0)) or 0), 4),
+                "net_apy": round(float(p.get("net_apy", 0) or 0), 4),
+                "tvl": round(float(p.get("tvl", 0) or 0), 2),
+                "risk": str(p.get("risk_level", "Medium")).lower(),
+                "risk_score": round(float(p.get("risk_score", 0) or 0), 2),
+                "gas_impact": round(float(p.get("gas_impact_pct", 0) or 0), 6),
+                "gas_cost_usd": round(float(p.get("gas_cost_usd", 0) or 0), 2),
+                "rank": int(p.get("rank", 0) or 0),
+            }
+        )
+
+    strategy_summary = None
+    if top_strategy_pool:
+        strategy_summary = {
+            "action_hint": "migrate"
+            if migration.get("recommendation") == "migrate"
+            else "consider"
+            if migration.get("recommendation") == "consider"
+            else "hold",
+            "recommended_protocol": top_strategy_pool.get("protocol", ""),
+            "recommended_pool": top_strategy_pool.get("pool_name")
+            or top_strategy_pool.get("pool_meta")
+            or top_strategy_pool.get("pool_id", ""),
+            "recommended_token": top_strategy_pool.get("token", ""),
+            "reasoning": [
+                f"Top net APY candidate: {float(top_strategy_pool.get('net_apy', 0) or 0):.2f}%",
+                f"TVL: ${float(top_strategy_pool.get('tvl', 0) or 0):,.0f}",
+                f"Risk level: {top_strategy_pool.get('risk_level', 'Medium')}",
+            ],
+        }
+
+    return {
+        "chain": chain or "ethereum",
+        "amount": amount,
+        "gas": {
+            "safe": gas_data.get("safe"),
+            "standard": gas_data.get("standard"),
+            "fast": gas_data.get("fast"),
+        },
+        "prices": {
+            "ETH": (price_data.get("prices", {}).get("ETH", {}) or {}).get("price"),
+        },
+        "pools": pool_items,
+        "migration_recommendation": migration,
+        "ai_strategy_output": strategy_summary,
+    }
 
 
 def _run_adk_strategy(
@@ -485,15 +574,51 @@ async def ai_explain_strategy(
 async def ai_chat(payload: AiChatRequest):
     """Chat assistant endpoint for beginner-friendly Gemini guidance."""
     try:
-        reply = chat_with_gemini(
+        assistant_context = await _build_assistant_context(
+            amount=payload.amount,
+            chain=payload.chain,
+            current_protocol=payload.current_protocol,
+            current_token=payload.current_token,
+            pool_limit=15,
+        )
+        chat_payload = chat_with_gemini(
             user_message=payload.message,
+            pool_context=assistant_context,
             chain=payload.chain,
             context=payload.context,
         )
-        return {"reply": reply}
+        return {
+            **chat_payload,
+            "context_used": {
+                "pools_count": len(assistant_context.get("pools", [])),
+                "chain": assistant_context.get("chain"),
+            },
+        }
     except Exception as exc:
         logger.exception("/ai/chat failed")
         raise HTTPException(status_code=502, detail=f"Failed to generate chat response: {exc}") from exc
+
+
+@app.get("/assistant/context")
+async def assistant_context(
+    amount: float = 10000.0,
+    chain: str | None = None,
+    current_protocol: str = "aave",
+    current_token: str = "USDC",
+):
+    """Return live assistant context used for DeFi copilot grounding."""
+    try:
+        context_payload = await _build_assistant_context(
+            amount=amount,
+            chain=chain,
+            current_protocol=current_protocol,
+            current_token=current_token,
+            pool_limit=25,
+        )
+        return context_payload
+    except Exception as exc:
+        logger.exception("/assistant/context failed")
+        raise HTTPException(status_code=502, detail=f"Failed to build assistant context: {exc}") from exc
 
 
 # ──────────────────────────────────────────────

@@ -136,6 +136,8 @@ npx hardhat run scripts/deploy.ts --network localhost
 | GET | `/migration` | Migration recommendation |
 | GET | `/ai-agent/strategy` | Autonomous strategy recommendation |
 | GET | `/ai/explain-strategy` | Gemini explanation for a specific strategy |
+| GET | `/assistant/context` | Live assistant grounding context (pools, gas, migration, strategy) |
+| POST | `/ai/chat` | DeFi Strategy Copilot chat grounded in live platform data |
 | GET | `/historical` | 30-day historical APY set |
 
 ## Autonomous Agent Architecture
@@ -161,6 +163,13 @@ The strategy agent consumes live pools, gas, and pricing inputs through ADK tool
 - Frontend integration: `Autonomous Strategy Agent` panel shows AI explanation with loading state (`Generating AI explanation...`)
 
 If Gemini is unavailable or not configured, the backend returns a deterministic fallback explanation to keep UX stable.
+
+### DeFi Strategy Copilot (Chat)
+
+- Chat endpoint: `POST /ai/chat`
+- Grounding endpoint: `GET /assistant/context`
+- Copilot prompt includes real pool context (protocol, pool name, token, gross APY, net APY, TVL, risk score, gas impact, migration recommendation, strategy summary).
+- The assistant is instructed to avoid invented pools or metrics and to answer only from current backend data.
 
 ### Wallet + Router Integration Notes
 

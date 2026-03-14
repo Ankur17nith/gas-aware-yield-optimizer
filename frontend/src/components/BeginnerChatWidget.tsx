@@ -5,10 +5,18 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  structured?: {
+    recommendedPool?: string;
+    reason?: string;
+    risk?: string;
+    gasImpact?: string;
+    notes?: string[];
+  };
 }
 
 interface Props {
   selectedChain: string;
+  depositAmount: number;
 }
 
 const QUICK_QUESTIONS = [
@@ -18,7 +26,7 @@ const QUICK_QUESTIONS = [
   'What does risk level mean?',
 ];
 
-export default function BeginnerChatWidget({ selectedChain }: Props) {
+export default function BeginnerChatWidget({ selectedChain, depositAmount }: Props) {
   const [open, setOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [input, setInput] = useState('');
@@ -51,11 +59,32 @@ export default function BeginnerChatWidget({ selectedChain }: Props) {
     setSending(true);
 
     try {
-      const result = await api.chatWithAssistant(text, selectedChain, contextText);
+      const result = await api.chatWithAssistant(
+        text,
+        selectedChain,
+        contextText,
+        depositAmount,
+        'aave',
+        'USDC'
+      );
+
+      const recommendedPool = result.recommended_pool
+        ? [result.recommended_pool.protocol, result.recommended_pool.pool, result.recommended_pool.token]
+            .filter(Boolean)
+            .join(' - ')
+        : undefined;
+
       const reply: ChatMessage = {
         id: `${Date.now()}-a`,
         role: 'assistant',
-        text: result.reply || 'I could not generate a response right now. Please try again.',
+        text: result.answer || 'I could not generate a response right now. Please try again.',
+        structured: {
+          recommendedPool,
+          reason: result.reason,
+          risk: result.risk,
+          gasImpact: result.gas_impact,
+          notes: result.notes,
+        },
       };
       setMessages((prev) => [...prev, reply]);
     } catch (err: any) {
@@ -95,7 +124,36 @@ export default function BeginnerChatWidget({ selectedChain }: Props) {
           <div style={S.messages}>
             {messages.map((m) => (
               <div key={m.id} style={m.role === 'assistant' ? S.assistantBubble : S.userBubble}>
-                {m.text}
+                <div>{m.text}</div>
+                {m.role === 'assistant' && m.structured && (
+                  <div style={S.structuredWrap}>
+                    {m.structured.recommendedPool && (
+                      <div style={S.structLine}>
+                        <span style={S.structLabel}>Recommended Pool:</span> {m.structured.recommendedPool}
+                      </div>
+                    )}
+                    {m.structured.reason && (
+                      <div style={S.structLine}>
+                        <span style={S.structLabel}>Reason:</span> {m.structured.reason}
+                      </div>
+                    )}
+                    {m.structured.risk && (
+                      <div style={S.structLine}>
+                        <span style={S.structLabel}>Risk:</span> {m.structured.risk}
+                      </div>
+                    )}
+                    {m.structured.gasImpact && (
+                      <div style={S.structLine}>
+                        <span style={S.structLabel}>Gas Impact:</span> {m.structured.gasImpact}
+                      </div>
+                    )}
+                    {m.structured.notes && m.structured.notes.length > 0 && (
+                      <div style={{ ...S.structLine, marginTop: 4 }}>
+                        <span style={S.structLabel}>Notes:</span> {m.structured.notes.join(' ')}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
             {sending && <div style={S.assistantBubble}>Thinking...</div>}
@@ -234,6 +292,22 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 12,
     lineHeight: 1.45,
     whiteSpace: 'pre-wrap',
+  },
+  structuredWrap: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTop: '1px solid var(--border)',
+    display: 'grid',
+    gap: 4,
+  },
+  structLine: {
+    fontSize: 11,
+    lineHeight: 1.4,
+    color: 'var(--text-2)',
+  },
+  structLabel: {
+    fontWeight: 700,
+    color: 'var(--text-1)',
   },
   inputRow: {
     display: 'grid',

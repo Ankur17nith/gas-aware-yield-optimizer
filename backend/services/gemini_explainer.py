@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Sequence
 
 try:
@@ -135,27 +136,104 @@ def _fallback_chat_answer(user_message: str) -> str:
 
 def chat_with_gemini(
     user_message: str,
+    pool_context: dict | None = None,
     chain: str | None = None,
     context: str | None = None,
-) -> str:
-    """Return a concise beginner-friendly answer for dashboard chat assistant."""
+) -> dict:
+    """Return a concise, data-grounded response for DeFi copilot chat assistant."""
+    context_obj = pool_context or {}
+    pools = context_obj.get("pools", []) if isinstance(context_obj, dict) else []
+
+    def _context_top_pool() -> dict:
+        if not isinstance(pools, list) or not pools:
+            return {}
+        try:
+            return max(
+                pools,
+                key=lambda p: float((p or {}).get("net_apy", 0) or 0),
+            )
+        except Exception:
+            return pools[0] if pools else {}
+
+    def _fallback_structured() -> dict:
+        top = _context_top_pool()
+        if top:
+            protocol = str(top.get("protocol", "Unknown"))
+            pool = str(top.get("pool", "Pool"))
+            token = str(top.get("token", ""))
+            net_apy = float(top.get("net_apy", 0) or 0)
+            tvl = float(top.get("tvl", 0) or 0)
+            risk = str(top.get("risk", "medium"))
+            gas_impact = float(top.get("gas_impact", 0) or 0)
+
+            answer = (
+                f"Based on live platform data, {protocol} {pool} ({token}) currently looks strong "
+                f"because its net APY is {net_apy:.2f}% with TVL around ${tvl:,.0f}."
+            )
+            reason = "Highest net APY among currently loaded pools with meaningful liquidity."
+            risk_note = f"Risk level is {risk}."
+            gas_note = f"Estimated gas impact is {gas_impact:.4f}% on your configured deposit context."
+            return {
+                "answer": answer,
+                "recommended_pool": {
+                    "protocol": protocol,
+                    "pool": pool,
+                    "token": token,
+                    "net_apy": round(net_apy, 4),
+                    "tvl": round(tvl, 2),
+                    "risk": risk,
+                    "gas_impact": round(gas_impact, 6),
+                },
+                "reason": reason,
+                "risk": risk_note,
+                "gas_impact": gas_note,
+                "notes": [
+                    "This response uses live pool context from the backend.",
+                    "No profit is guaranteed; yields and gas can change quickly.",
+                ],
+            }
+
+        return {
+            "answer": _fallback_chat_answer(user_message),
+            "recommended_pool": None,
+            "reason": "No live pool context was available in this request.",
+            "risk": "Risk depends on protocol maturity, TVL, and APY volatility.",
+            "gas_impact": "Gas impact is lower on L2 and higher on Ethereum mainnet.",
+            "notes": [
+                "Try refreshing data and asking again for pool-specific guidance.",
+            ],
+        }
+
     model = _get_model()
     if model is None or _client is None:
-        return _fallback_chat_answer(user_message)
+        return _fallback_structured()
 
     prompt = f"""
-You are YieldOptimizer Assistant, a beginner-friendly DeFi tutor inside a stablecoin yield optimizer app.
+You are YieldOptimizer DeFi Strategy Copilot.
+
+You MUST answer using only the provided live pool context.
+Do NOT invent pools, APY, TVL, gas impact, migration data, or strategy output.
+If specific data is missing, say it is unavailable.
 
 Style rules:
-- Keep answer short (max 120 words).
+- Keep answer short (max 140 words).
 - Explain in simple English for non-technical users.
 - Never guarantee profits.
 - If user asks for financial advice, provide educational guidance and risk caveat.
 - If useful, provide 2-4 practical steps.
 
+Return STRICT JSON only with keys:
+answer,
+recommended_pool (object or null with keys: protocol,pool,token,net_apy,tvl,risk,gas_impact),
+reason,
+risk,
+gas_impact,
+notes (array of short strings)
+
 Context:
 - Active chain: {chain or 'unknown'}
 - App context: {context or 'none'}
+- Pool context JSON: {json.dumps(context_obj, ensure_ascii=True)}
 
 User question:
 {user_message}
@@ -165,8 +243,24 @@ User question:
         response = _client.models.generate_content(model=model, contents=prompt)
         text = (getattr(response, "text", "") or "").strip()
         if text:
-            return text
+            try:
+                parsed = json.loads(text)
+                if isinstance(parsed, dict) and isinstance(parsed.get("answer"), str):
+                    return parsed
+            except Exception:
+                pass
+
+            # Best-effort JSON extraction if the model wraps output.
+            start = text.find("{")
+            end = text.rfind("}")
+            if start >= 0 and end > start:
+                try:
+                    parsed = json.loads(text[start : end + 1])
+                    if isinstance(parsed, dict) and isinstance(parsed.get("answer"), str):
+                        return parsed
+                except Exception:
+                    pass
     except Exception:
         logger.exception("Gemini chat generation failed")
 
-    return _fallback_chat_answer(user_message)
+    return _fallback_structured()
