@@ -2,8 +2,9 @@ import { createConfig, http } from 'wagmi';
 import { arbitrum, base, mainnet, polygon, sepolia } from 'wagmi/chains';
 import { coinbaseWallet, injected, walletConnect } from 'wagmi/connectors';
 
-const walletConnectProjectId =
-  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || 'REPLACE_WITH_WALLETCONNECT_PROJECT_ID';
+const walletConnectProjectId = (
+  import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || import.meta.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || ''
+).trim();
 
 const walletConnectMetadata = {
   name: 'Gas-Aware Stablecoin Yield Optimizer',
@@ -19,11 +20,15 @@ export const wagmiConfig = createConfig({
   connectors: [
     injected({ target: 'metaMask' }),
     injected({ target: 'coinbaseWallet' }),
-    walletConnect({
-      projectId: walletConnectProjectId,
-      metadata: walletConnectMetadata,
-      showQrModal: true,
-    }),
+    ...(walletConnectProjectId
+      ? [
+          walletConnect({
+            projectId: walletConnectProjectId,
+            metadata: walletConnectMetadata,
+            showQrModal: true,
+          }),
+        ]
+      : []),
     coinbaseWallet({ appName: 'Gas-Aware Yield Optimizer', appLogoUrl: '' }),
   ],
   transports: {
