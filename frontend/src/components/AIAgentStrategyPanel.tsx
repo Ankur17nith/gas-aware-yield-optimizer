@@ -22,6 +22,7 @@ export default function AIAgentStrategyPanel({
   const [explanationLoading, setExplanationLoading] = useState(false);
   const [explanation, setExplanation] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [holdConfirmOpen, setHoldConfirmOpen] = useState(false);
 
   const seedCurrent = useMemo(() => {
     if (!pools.length) {
@@ -97,6 +98,20 @@ export default function AIAgentStrategyPanel({
     return null;
   }
 
+  const proceedWithMigration = () => {
+    if (!result?.recommended) return;
+    onApplyRecommendation(result.recommended.protocol, result.recommended.token);
+  };
+
+  const handleApplyClick = () => {
+    if (!result?.recommended) return;
+    if (result.action === 'hold') {
+      setHoldConfirmOpen(true);
+      return;
+    }
+    proceedWithMigration();
+  };
+
   return (
     <section style={S.card}>
       <div style={S.header}>
@@ -154,6 +169,16 @@ export default function AIAgentStrategyPanel({
             ))}
           </div>
 
+          {result.action === 'hold' && (
+            <div style={S.warningBox}>
+              <div style={S.warningTitle}>AI Warning</div>
+              <div style={S.reasonLine}>
+                Our strategy engine recommends holding your current position.
+              </div>
+              <div style={S.reasonLine}>You may still migrate, but expected return may be lower.</div>
+            </div>
+          )}
+
           <div style={S.reasonBox}>
             <div style={S.explainTitle}>AI Explanation</div>
             {explanationLoading ? (
@@ -166,8 +191,7 @@ export default function AIAgentStrategyPanel({
           <div style={S.actions}>
             <button
               style={S.cta}
-              onClick={() => onApplyRecommendation(result.recommended.protocol, result.recommended.token)}
-              disabled={result.action === 'hold'}
+              onClick={handleApplyClick}
             >
               Apply Strategy in Migration Flow
             </button>
@@ -178,6 +202,39 @@ export default function AIAgentStrategyPanel({
             )}
           </div>
         </>
+      )}
+
+      {holdConfirmOpen && result && (
+        <div style={S.overlay} onClick={() => setHoldConfirmOpen(false)}>
+          <div style={S.confirmModal} onClick={(e) => e.stopPropagation()}>
+            <div style={S.confirmTitle}>AI Suggests Holding</div>
+            <div style={S.reasonLine}>
+              The AI strategy engine recommends not migrating at this time.
+            </div>
+            <div style={{ ...S.reasonLine, marginTop: 8 }}>
+              Potential risks:
+            </div>
+            {result.reasoning?.slice(0, 3).map((line, idx) => (
+              <div key={`${idx}-${line}-risk`} style={S.reasonLine}>
+                • {line}
+              </div>
+            ))}
+            <div style={S.confirmActions}>
+              <button style={S.cancelBtn} onClick={() => setHoldConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button
+                style={S.proceedBtn}
+                onClick={() => {
+                  setHoldConfirmOpen(false);
+                  proceedWithMigration();
+                }}
+              >
+                Proceed Anyway
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );
@@ -340,6 +397,19 @@ const S: Record<string, React.CSSProperties> = {
     padding: '9px 10px',
     marginBottom: 12,
   },
+  warningBox: {
+    background: 'rgba(245, 158, 11, 0.12)',
+    border: '1px solid rgba(245, 158, 11, 0.35)',
+    borderRadius: 10,
+    padding: '9px 10px',
+    marginBottom: 12,
+  },
+  warningTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: 'var(--warning)',
+    marginBottom: 6,
+  },
   reasonLine: {
     fontSize: 12,
     color: 'var(--text-2)',
@@ -363,6 +433,60 @@ const S: Record<string, React.CSSProperties> = {
     color: '#fff',
     border: 'none',
     borderRadius: 9,
+    padding: '8px 12px',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.55)',
+    zIndex: 1100,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  confirmModal: {
+    width: '100%',
+    maxWidth: 520,
+    background: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 16,
+    display: 'grid',
+    gap: 6,
+  },
+  confirmTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--text-1)',
+    marginBottom: 2,
+  },
+  confirmActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 10,
+  },
+  cancelBtn: {
+    background: 'transparent',
+    color: 'var(--text-1)',
+    border: '1px solid var(--border)',
+    borderRadius: 8,
+    padding: '8px 12px',
+    fontSize: 12,
+    fontWeight: 700,
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  },
+  proceedBtn: {
+    background: 'var(--warning)',
+    color: '#111827',
+    border: 'none',
+    borderRadius: 8,
     padding: '8px 12px',
     fontSize: 12,
     fontWeight: 700,

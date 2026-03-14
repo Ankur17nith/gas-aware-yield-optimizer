@@ -222,7 +222,7 @@ export default function MigrationModal({
               <button style={styles.cancelBtn} onClick={onClose}>
                 Cancel
               </button>
-              {rec.recommendation !== 'hold' && rec.target && (
+              {rec.target && (
                 <button
                   style={styles.confirmBtn}
                   onClick={onConfirm}
