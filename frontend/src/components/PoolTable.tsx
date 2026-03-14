@@ -15,14 +15,19 @@ interface Props {
   loading: boolean;
   error?: string | null;
   onMigrate: (pool: Pool) => void;
+  onWhyThisPool?: (pool: Pool) => Promise<string>;
   onPoolClick?: (pool: Pool) => void;
 }
 
 type SortKey = 'rank' | 'protocol' | 'pool_name' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score';
 
-export default function PoolTable({ pools, predictions, loading, error, onMigrate, onPoolClick }: Props) {
+export default function PoolTable({ pools, predictions, loading, error, onMigrate, onWhyThisPool, onPoolClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('net_apy');
   const [sortAsc, setSortAsc] = useState(false);
+  const [whyLoadingPoolId, setWhyLoadingPoolId] = useState<string | null>(null);
+  const [whyOpen, setWhyOpen] = useState(false);
+  const [whyTitle, setWhyTitle] = useState('');
+  const [whyText, setWhyText] = useState('');
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc(!sortAsc);
@@ -58,8 +63,25 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
     { label: '#', key: 'rank' }, { label: 'Protocol', key: 'protocol' }, { label: 'Pool', key: 'pool_name' }, { label: 'Token', key: 'token' },
     { label: 'Gross APY', key: 'gross_apy' }, { label: 'Gas Cost', key: 'gas_cost_usd' },
     { label: 'Net APY', key: 'net_apy' }, { label: 'Risk', key: 'risk_score' }, { label: 'TVL', key: 'tvl' },
-    { label: 'AI Prediction', key: '' }, { label: '', key: '' },
+    { label: 'AI Prediction', key: '' }, { label: 'Actions', key: '' },
   ];
+
+  const askWhyThisPool = async (pool: Pool) => {
+    if (!onWhyThisPool) return;
+    setWhyLoadingPoolId(pool.pool_id);
+    try {
+      const explanation = await onWhyThisPool(pool);
+      setWhyTitle(`${pool.protocol} ${pool.pool_name || pool.pool_meta || pool.token}`);
+      setWhyText(explanation);
+      setWhyOpen(true);
+    } catch {
+      setWhyTitle('AI explanation unavailable');
+      setWhyText('Could not fetch explanation right now. Please retry.');
+      setWhyOpen(true);
+    } finally {
+      setWhyLoadingPoolId(null);
+    }
+  };
 
   return (
     <div style={styles.wrapper}>
@@ -95,7 +117,7 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                   <td style={{ ...styles.td, whiteSpace: 'normal' }}>
                     <div style={styles.poolCell}>
                       <span style={styles.poolName}>{pool.pool_name || pool.pool_meta || 'Standard Pool'}</span>
-                      <span style={styles.poolLabel}>{pool.protocol} - {pool.pool_name || pool.pool_meta || 'Standard Pool'} - {pool.token}</span>
+                      <span style={styles.poolLabel}>{pool.protocol} • {pool.token}</span>
                     </div>
                   </td>
                   <td style={styles.td}><span style={styles.tokenBadge}>{pool.token}</span></td>
@@ -145,9 +167,21 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                     ) : <span style={{ color: 'var(--text-3)', fontSize: 13 }}>—</span>}
                   </td>
                   <td style={styles.td}>
-                    <button style={styles.migrateBtn} onClick={(e) => { e.stopPropagation(); onMigrate(pool); }}>
-                      Migrate
-                    </button>
+                    <div style={styles.actionRow}>
+                      <button style={styles.migrateBtn} onClick={(e) => { e.stopPropagation(); onMigrate(pool); }}>
+                        Migrate
+                      </button>
+                      <button
+                        style={styles.whyBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          askWhyThisPool(pool);
+                        }}
+                        disabled={!onWhyThisPool || whyLoadingPoolId === pool.pool_id}
+                      >
+                        {whyLoadingPoolId === pool.pool_id ? 'Thinking...' : 'Why this pool?'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -155,6 +189,19 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
           </tbody>
         </table>
       </div>
+
+      {whyOpen && (
+        <div style={styles.whyOverlay} onClick={() => setWhyOpen(false)}>
+          <div style={styles.whyModal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.whyHead}>
+              <div style={styles.whyTitle}>Why this pool?</div>
+              <button style={styles.whyCloseBtn} onClick={() => setWhyOpen(false)}>Close</button>
+            </div>
+            <div style={styles.whySub}>{whyTitle}</div>
+            <p style={styles.whyText}>{whyText}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -212,10 +259,52 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
   },
   predCell: { display: 'flex', alignItems: 'center', gap: 6 },
+  actionRow: { display: 'flex', gap: 8 },
   migrateBtn: {
     background: 'var(--primary)', color: '#fff', border: 'none', borderRadius: 6,
     padding: '6px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
     transition: 'background 0.15s', fontFamily: 'inherit',
+  },
+  whyBtn: {
+    background: 'var(--surface)', color: 'var(--text-1)', border: '1px solid var(--border)', borderRadius: 6,
+    padding: '6px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+    transition: 'background 0.15s', fontFamily: 'inherit',
+  },
+  whyOverlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(2, 6, 23, 0.58)',
+    zIndex: 220,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+  whyModal: {
+    width: 'min(620px, 100%)',
+    background: 'var(--card)',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 14,
+    boxShadow: '0 18px 50px rgba(2, 8, 23, 0.45)',
+  },
+  whyHead: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  whyTitle: { fontSize: 14, fontWeight: 700, color: 'var(--text-1)' },
+  whySub: { fontSize: 12, color: 'var(--text-3)', marginBottom: 10 },
+  whyText: { margin: 0, whiteSpace: 'pre-wrap', color: 'var(--text-1)', fontSize: 13, lineHeight: 1.5 },
+  whyCloseBtn: {
+    border: '1px solid var(--border)',
+    background: 'var(--surface)',
+    color: 'var(--text-2)',
+    borderRadius: 8,
+    padding: '6px 10px',
+    fontSize: 12,
+    cursor: 'pointer',
   },
   loadingWrap: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 48 },
   empty: { padding: 48, textAlign: 'center', color: 'var(--text-3)', fontSize: 14 },

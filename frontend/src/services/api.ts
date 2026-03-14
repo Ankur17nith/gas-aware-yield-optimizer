@@ -63,6 +63,7 @@ export interface AiChatResponse {
   reason?: string;
   risk?: string;
   gas_impact?: string;
+  migration_advice?: string;
   notes?: string[];
   context_used?: {
     pools_count?: number;

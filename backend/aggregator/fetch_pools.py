@@ -2,6 +2,7 @@
 
 import time
 import logging
+import re
 import httpx
 from typing import TypedDict
 from config import settings
@@ -184,23 +185,43 @@ def _normalize_protocol(raw: str) -> str:
 
 
 def _derive_pool_name(raw_pool: dict, project: str, matched_token: str) -> str:
-    pool_meta = str(raw_pool.get("poolMeta") or "").strip()
-    if pool_meta:
-        return pool_meta
-
-    symbol = str(raw_pool.get("symbol") or "").strip()
     clean_project = _normalize_protocol(project)
 
-    if "yearn" in project:
-        return f"{matched_token} Vault"
-    if "compound" in project:
-        return f"{matched_token} Lending Pool"
-    if "aave" in project:
-        return f"{matched_token} Variable Pool"
+    symbol = str(raw_pool.get("symbol") or "").strip()
+    clean_symbol = _clean_symbol_label(symbol)
+    if clean_symbol:
+        return clean_symbol
 
-    if symbol:
-        if symbol.upper() == matched_token.upper():
-            return f"{clean_project} {matched_token} Pool"
-        return f"{clean_project} {symbol} Pool"
+    pool_meta = str(raw_pool.get("poolMeta") or "").strip()
+    clean_meta = _clean_pool_meta(pool_meta, clean_project)
+    if clean_meta:
+        return clean_meta
 
-    return f"{clean_project} {matched_token} Pool"
+    return matched_token
+
+
+def _clean_symbol_label(symbol: str) -> str:
+    s = (symbol or "").strip().upper()
+    if not s:
+        return ""
+    s = re.sub(r"[^A-Z0-9/\-\s]", "", s)
+    s = s.replace("/", "-")
+    s = re.sub(r"\s+", "-", s)
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+    return s
+
+
+def _clean_pool_meta(pool_meta: str, protocol: str) -> str:
+    meta = (pool_meta or "").strip()
+    if not meta:
+        return ""
+
+    # Remove repeated protocol prefix (e.g. "Curve Curve USDC-...").
+    meta = re.sub(rf"^\s*{re.escape(protocol)}\s+", "", meta, flags=re.IGNORECASE)
+    meta = re.sub(rf"^\s*{re.escape(protocol)}\s+", "", meta, flags=re.IGNORECASE)
+    meta = re.sub(r"\b(pool|vault|lending)\b", "", meta, flags=re.IGNORECASE)
+    meta = re.sub(r"[^A-Za-z0-9/\-\s]", "", meta)
+    meta = meta.replace("/", "-")
+    meta = re.sub(r"\s+", "-", meta)
+    meta = re.sub(r"-{2,}", "-", meta).strip("-")
+    return meta.upper()

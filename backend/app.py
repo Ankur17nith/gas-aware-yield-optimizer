@@ -69,10 +69,12 @@ async def _build_assistant_context(
 
     pool_items: list[dict] = []
     for p in ranked[:pool_limit]:
+        clean_pool_name = p.get("pool_name") or p.get("pool_meta") or p.get("pool_id", "")
         pool_items.append(
             {
                 "protocol": p.get("protocol", ""),
-                "pool": p.get("pool_name") or p.get("pool_meta") or p.get("pool_id", ""),
+                "pool_name": clean_pool_name,
+                "pool": clean_pool_name,
                 "token": p.get("token", ""),
                 "gross_apy": round(float(p.get("gross_apy", p.get("apy", 0)) or 0), 4),
                 "net_apy": round(float(p.get("net_apy", 0) or 0), 4),

@@ -10,6 +10,7 @@ interface ChatMessage {
     reason?: string;
     risk?: string;
     gasImpact?: string;
+    migrationAdvice?: string;
     notes?: string[];
   };
 }
@@ -83,6 +84,7 @@ export default function BeginnerChatWidget({ selectedChain, depositAmount }: Pro
           reason: result.reason,
           risk: result.risk,
           gasImpact: result.gas_impact,
+          migrationAdvice: result.migration_advice,
           notes: result.notes,
         },
       };
@@ -145,6 +147,11 @@ export default function BeginnerChatWidget({ selectedChain, depositAmount }: Pro
                     {m.structured.gasImpact && (
                       <div style={S.structLine}>
                         <span style={S.structLabel}>Gas Impact:</span> {m.structured.gasImpact}
+                      </div>
+                    )}
+                    {m.structured.migrationAdvice && (
+                      <div style={S.structLine}>
+                        <span style={S.structLabel}>Migration Advice:</span> {m.structured.migrationAdvice}
                       </div>
                     )}
                     {m.structured.notes && m.structured.notes.length > 0 && (

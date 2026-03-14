@@ -8,7 +8,12 @@ const SAFE_APY_MAX = 100;
 function normalizePoolName(pool: Pool): string {
   const candidate = (pool.pool_name || pool.pool_meta || '').trim();
   if (!candidate) return 'Standard Pool';
-  return candidate;
+  const protocol = (pool.protocol || '').trim();
+  const escaped = protocol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const deduped = protocol
+    ? candidate.replace(new RegExp(`^${escaped}\\s+${escaped}\\s+`, 'i'), '').replace(new RegExp(`^${escaped}\\s+`, 'i'), '')
+    : candidate;
+  return deduped.replace(/\s+/g, ' ').trim();
 }
 
 function processPools(rawPools: Pool[]): Pool[] {

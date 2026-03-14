@@ -15,6 +15,49 @@ logger = logging.getLogger(__name__)
 _model = None
 _client = None
 
+STRATEGY_KEYWORDS = [
+    "which pool",
+    "recommend",
+    "best pool",
+    "should i migrate",
+    "should i use",
+    "best yield",
+    "where should i deposit",
+    "best usdc pool",
+    "which protocol has the best yield",
+]
+
+PLATFORM_KEYWORDS = [
+    "how does this platform work",
+    "how is net apy calculated",
+    "how do you calculate",
+    "what is gas impact",
+    "what does risk level mean",
+    "net apy",
+    "gas impact",
+]
+
+EDUCATION_KEYWORDS = [
+    "what is",
+    "explain",
+    "define",
+    "how does",
+    "why does",
+]
+
+BLOCKCHAIN_KEYWORDS = [
+    "blockchain",
+    "ethereum",
+    "solana",
+    "smart contract",
+    "wallet",
+    "layer 2",
+    "l2",
+    "gas fee",
+    "yield farming",
+    "defi",
+]
+
 
 def _get_model():
     global _model, _client
@@ -140,20 +183,10 @@ def _is_recommendation_request(message: str) -> bool:
     if not text:
         return False
 
-    explicit_phrases = [
-        "which pool should i use",
-        "what pool is best",
-        "best pool for",
-        "should i migrate",
-        "which protocol has the best yield",
-        "which pool should i migrate to",
-        "what is the best pool",
-        "recommend a pool",
-    ]
-    if any(phrase in text for phrase in explicit_phrases):
+    if any(phrase in text for phrase in STRATEGY_KEYWORDS):
         return True
 
-    # Allow concise recommendation intents like "best usdc pool".
+    # Allow concise recommendation intents like "best usdc pool" or "pool for usdc".
     if re.search(r"\b(best|recommend|migrate)\b", text) and re.search(
         r"\b(pool|protocol|apy|yield|usdc|usdt|dai|frax)\b", text
     ):
@@ -168,13 +201,12 @@ def _classify_question_type(message: str) -> str:
         return "educational"
     if _is_recommendation_request(text):
         return "strategy"
-    if re.search(r"\b(this platform|dashboard|how do you calculate|net apy|risk level|gas impact)\b", text):
+    if any(k in text for k in PLATFORM_KEYWORDS):
         return "platform"
-    if re.search(
-        r"\b(ethereum|bitcoin|blockchain|smart contract|wallet|private key|public key|layer 2|l2|consensus|defi)\b",
-        text,
-    ):
+    if any(k in text for k in BLOCKCHAIN_KEYWORDS):
         return "blockchain"
+    if any(k in text for k in EDUCATION_KEYWORDS):
+        return "educational"
     return "educational"
 
 
@@ -255,6 +287,7 @@ def _fallback_non_strategy_answer(user_message: str, question_type: str) -> dict
         "reason": "Educational response mode: no pool recommendation requested.",
         "risk": "DeFi has smart-contract, liquidity, and market risks. Returns are not guaranteed.",
         "gas_impact": "Gas is a real cost and should be included when comparing yields.",
+        "migration_advice": "Ask a strategy question if you want migrate-or-hold guidance.",
         "notes": [
             "Ask a strategy question like 'which pool should I use?' if you want a recommendation.",
         ],
@@ -292,16 +325,31 @@ def chat_with_gemini(
         top = _context_top_pool()
         if top:
             protocol = str(top.get("protocol", "Unknown"))
-            pool = str(top.get("pool", "Pool"))
+            pool = str(top.get("pool_name") or top.get("pool") or "Pool")
             token = str(top.get("token", ""))
             net_apy = float(top.get("net_apy", 0) or 0)
             tvl = float(top.get("tvl", 0) or 0)
             risk = str(top.get("risk", "medium"))
             gas_impact = float(top.get("gas_impact", 0) or 0)
 
+            migration_advice = (
+                "Migrate if your current pool has clearly lower net APY after gas costs. "
+                "Hold if the APY difference is small and gas would consume the gain."
+            )
             answer = (
-                f"Based on live platform data, {protocol} {pool} ({token}) currently looks strong "
-                f"because its net APY is {net_apy:.2f}% with TVL around ${tvl:,.0f}."
+                "Recommended Pool\n\n"
+                f"Protocol: {protocol}\n"
+                f"Pool: {pool}\n"
+                f"Token: {token}\n\n"
+                f"Net APY: {net_apy:.2f}%\n"
+                f"TVL: ${tvl:,.0f}\n"
+                f"Risk: {risk.title()}\n\n"
+                "Reason\n"
+                "This pool currently has the strongest gas-adjusted return among loaded options.\n\n"
+                "Gas Impact\n"
+                f"Estimated drag is {gas_impact:.4f}% on expected return.\n\n"
+                "Migration Advice\n"
+                f"{migration_advice}"
             )
             reason = "Highest net APY among currently loaded pools with meaningful liquidity."
             risk_note = f"Risk level is {risk}."
@@ -320,6 +368,7 @@ def chat_with_gemini(
                 "reason": reason,
                 "risk": risk_note,
                 "gas_impact": gas_note,
+                "migration_advice": migration_advice,
                 "notes": [
                     "This response uses live pool context from the backend.",
                     "No profit is guaranteed; yields and gas can change quickly.",
@@ -333,6 +382,7 @@ def chat_with_gemini(
             "reason": "No live pool context was available in this request.",
             "risk": "Risk depends on protocol maturity, TVL, and APY volatility.",
             "gas_impact": "Gas impact is lower on L2 and higher on Ethereum mainnet.",
+            "migration_advice": "Refresh data before taking a migration decision.",
             "notes": [
                 "Try refreshing data and asking again for pool-specific guidance.",
             ],
@@ -340,34 +390,40 @@ def chat_with_gemini(
         }
 
     model = _get_model()
+    prompt = ""
     if model is None or _client is None:
         return _fallback_structured()
 
     prompt = f"""
-You are a beginner-friendly DeFi and blockchain copilot inside Gas-Aware Yield Optimizer.
+You are a DeFi strategy assistant inside a platform called Gas-Aware Yield Optimizer.
+
+You help users understand DeFi and choose the best yield strategies.
+
+You must support:
+1. Educational questions
+2. Platform questions
+3. Strategy recommendations
+
+If the user asks about pools, migration, or strategy, analyze the provided pool data and recommend the best pool.
+If the user asks about DeFi or blockchain concepts, explain clearly in beginner-friendly language.
+Always include reasoning, risk level, and gas impact when recommending strategies.
 
 CRITICAL RULE:
 - Recommend pools ONLY when user explicitly asks for recommendation/strategy (question_type = strategy).
-- For all other question types, explain concepts. Do not recommend specific pools.
+- For all other question types, explain concepts and set recommended_pool to null.
 
 Question type detected by backend: {question_type}
 
-Question types and behavior:
-1) educational: explain clearly with this structure -> Definition, Example, How it affects DeFi strategy.
-2) platform: explain using platform logic and formulas when relevant.
-   Example formula: Net APY = Gross APY - Gas Impact - Protocol Fees.
-3) strategy: use only provided live pool context and return recommendation fields.
-4) blockchain: explain core blockchain concepts in simple language.
-
-Data safety:
-- Use only the provided context.
-- Do NOT invent pools, APY, TVL, gas impact, or migration values.
-- If data is missing, clearly say unavailable.
+Formatting rules:
+- For strategy questions, answer should include sections:
+    Recommended Pool, Reason, Gas Impact, Migration Advice.
+- For educational/platform/blockchain questions, use short simple paragraphs.
 - Never guarantee profits.
 
-Style:
-- Short paragraphs, simple language for beginners.
-- Avoid jargon unless needed, and explain it.
+Data safety:
+- Use only provided context data.
+- Do NOT invent pools, APY, TVL, risk, gas impact, or migration values.
+- If data is missing, say unavailable.
 
 Return STRICT JSON only with keys:
 answer,
@@ -375,12 +431,9 @@ recommended_pool (object or null with keys: protocol,pool,token,net_apy,tvl,risk
 reason,
 risk,
 gas_impact,
+migration_advice,
 notes (array of short strings),
 question_type
-
-Rules for recommended_pool:
-- If question_type is strategy: choose best option from context and fill recommended_pool.
-- Otherwise: recommended_pool must be null.
 
 Context:
 - Active chain: {chain or 'unknown'}
@@ -402,6 +455,10 @@ User question:
                         parsed["question_type"] = question_type
                     if not should_recommend:
                         parsed["recommended_pool"] = None
+                        parsed.setdefault(
+                            "migration_advice",
+                            "Ask a strategy question if you want migrate-or-hold guidance.",
+                        )
                     return parsed
             except Exception:
                 pass
@@ -417,6 +474,10 @@ User question:
                             parsed["question_type"] = question_type
                         if not should_recommend:
                             parsed["recommended_pool"] = None
+                            parsed.setdefault(
+                                "migration_advice",
+                                "Ask a strategy question if you want migrate-or-hold guidance.",
+                            )
                         return parsed
                 except Exception:
                     pass

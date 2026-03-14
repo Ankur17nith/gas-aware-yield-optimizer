@@ -214,6 +214,17 @@ export default function Dashboard() {
   }, [migration, selectedPool, depositAmount, wallet, saveTransaction, addToast, refreshContractStatus]);
 
   const handlePoolClick = useCallback((pool: Pool) => { setDetailPool(pool); }, []);
+  const handleWhyThisPool = useCallback(async (pool: Pool): Promise<string> => {
+    const response = await api.getAiExplainStrategy(
+      pool.protocol,
+      pool.pool_name || pool.pool_meta || pool.token,
+      pool.token,
+      pool.net_apy ?? pool.apy ?? 0,
+      pool.tvl ?? 0,
+      selectedChain
+    );
+    return response.explanation;
+  }, [selectedChain]);
   const handleOpenDeposit = useCallback((pool: Pool) => { setDetailPool(null); setDwModal({ open: true, mode: 'deposit', pool }); }, []);
   const handleOpenWithdraw = useCallback((pool: Pool) => { setDetailPool(null); setDwModal({ open: true, mode: 'withdraw', pool }); }, []);
 
@@ -558,7 +569,10 @@ export default function Dashboard() {
               ) : (
                 <PoolTable pools={filteredPools} predictions={predictions.predictions}
                   loading={pools.loading} error={pools.error}
-                  onMigrate={handleMigrate} onPoolClick={handlePoolClick} />
+                  onMigrate={handleMigrate}
+                  onWhyThisPool={handleWhyThisPool}
+                  onPoolClick={handlePoolClick}
+                />
               )}
               {predictions.predictions.length > 0 && !pools.loading && (
                 <div style={{ marginTop: 24 }}>
