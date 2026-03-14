@@ -27,6 +27,7 @@ import APYHeatmap from './APYHeatmap';
 import ActivityFeed from './ActivityFeed';
 import ContractStatusPanel from './ContractStatusPanel';
 import SourceBadges from './SourceBadges';
+import BeginnerChatWidget from './BeginnerChatWidget';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
 import { formatUSD, formatAPY, formatCompact } from '../utils/format';
 import {
@@ -644,6 +645,8 @@ export default function Dashboard() {
         protocol={dwModal.pool?.protocol ?? ''} token={dwModal.pool?.token ?? ''}
         onConfirm={handleDwConfirm}
         onClose={() => setDwModal({ open: false, mode: 'deposit', pool: null })} />
+
+      <BeginnerChatWidget selectedChain={selectedChain} />
     </div>
   );
 }

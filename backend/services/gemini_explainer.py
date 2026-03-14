@@ -101,3 +101,72 @@ Signals: {', '.join(reasoning) if reasoning else 'n/a'}
         logger.exception("Gemini explanation generation failed")
 
     return _fallback_explanation(protocol, pool, token, apy, tvl, confidence, reasoning)
+
+
+def _fallback_chat_answer(user_message: str) -> str:
+    text = user_message.strip()
+    if not text:
+        return (
+            "Ask me anything about stablecoin yield optimization. For example: "
+            "'What is APY?', 'Should I migrate now?', or 'How does gas cost affect returns?'"
+        )
+
+    lower = text.lower()
+    if "apy" in lower:
+        return (
+            "APY is your annual percentage yield. In this app, focus on net APY, which subtracts gas costs "
+            "so you can compare real expected returns."
+        )
+    if "gas" in lower:
+        return (
+            "Gas is the transaction fee paid on-chain. High gas can wipe out small APY gains, so migration "
+            "is best when expected net gain is clearly higher than migration cost."
+        )
+    if "migrate" in lower:
+        return (
+            "A migration can be good when the target pool has better net APY, enough TVL liquidity, and the "
+            "30-day expected gain exceeds migration gas friction."
+        )
+    return (
+        "I can help you with beginner DeFi questions. Try asking about APY, gas fees, risk levels, "
+        "pool comparison, or when to migrate."
+    )
+
+
+def chat_with_gemini(
+    user_message: str,
+    chain: str | None = None,
+    context: str | None = None,
+) -> str:
+    """Return a concise beginner-friendly answer for dashboard chat assistant."""
+    model = _get_model()
+    if model is None or _client is None:
+        return _fallback_chat_answer(user_message)
+
+    prompt = f"""
+You are YieldOptimizer Assistant, a beginner-friendly DeFi tutor inside a stablecoin yield optimizer app.
+
+Style rules:
+- Keep answer short (max 120 words).
+- Explain in simple English for non-technical users.
+- Never guarantee profits.
+- If user asks for financial advice, provide educational guidance and risk caveat.
+- If useful, provide 2-4 practical steps.
+
+Context:
+- Active chain: {chain or 'unknown'}
+- App context: {context or 'none'}
+
+User question:
+{user_message}
+""".strip()
+
+    try:
+        response = _client.models.generate_content(model=model, contents=prompt)
+        text = (getattr(response, "text", "") or "").strip()
+        if text:
+            return text
+    except Exception:
+        logger.exception("Gemini chat generation failed")
+
+    return _fallback_chat_answer(user_message)

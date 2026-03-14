@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import logging
 import math
@@ -19,11 +20,17 @@ from engine.pool_ranker import rank_pools
 from engine.migration_recommender import recommend_migration
 from ai_engine.model_loader import load_model
 from ai_engine.yield_predictor import predict_yields
-from services.gemini_explainer import explain_strategy
+from services.gemini_explainer import explain_strategy, chat_with_gemini
 
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+
+
+class AiChatRequest(BaseModel):
+    message: str
+    chain: str | None = None
+    context: str | None = None
 
 
 def _run_adk_strategy(
@@ -472,6 +479,21 @@ async def ai_explain_strategy(
     except Exception as exc:
         logger.exception("/ai/explain-strategy failed")
         raise HTTPException(status_code=502, detail=f"Failed to generate strategy explanation: {exc}") from exc
+
+
+@app.post("/ai/chat")
+async def ai_chat(payload: AiChatRequest):
+    """Chat assistant endpoint for beginner-friendly Gemini guidance."""
+    try:
+        reply = chat_with_gemini(
+            user_message=payload.message,
+            chain=payload.chain,
+            context=payload.context,
+        )
+        return {"reply": reply}
+    except Exception as exc:
+        logger.exception("/ai/chat failed")
+        raise HTTPException(status_code=502, detail=f"Failed to generate chat response: {exc}") from exc
 
 
 # ──────────────────────────────────────────────

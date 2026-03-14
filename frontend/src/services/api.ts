@@ -48,6 +48,10 @@ export interface AiExplainStrategyResponse {
   explanation: string;
 }
 
+export interface AiChatResponse {
+  reply: string;
+}
+
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
   const isAbsoluteBase = /^https?:\/\//.test(BASE_URL);
   const url = isAbsoluteBase
@@ -73,6 +77,57 @@ async function request<T>(endpoint: string, params?: Record<string, string>): Pr
           continue;
         }
         throw new Error(`API Error ${res.status} from ${url.pathname}: ${body || 'Unknown backend error'}`);
+      }
+
+      return res.json();
+    } catch (error) {
+      lastNetworkError = error;
+      const isLastAttempt = attempt === MAX_RETRIES;
+      const isHttpError = error instanceof Error && error.message.startsWith('API Error');
+
+      if (isHttpError || isLastAttempt) {
+        break;
+      }
+
+      await sleep(RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  if (lastNetworkError instanceof Error && lastNetworkError.message.startsWith('API Error')) {
+    throw lastNetworkError;
+  }
+
+  const message = lastNetworkError instanceof Error ? lastNetworkError.message : 'Network request failed';
+  throw new Error(
+    `Unable to fetch data. Retrying was attempted, but backend is still unreachable at ${BASE_URL}: ${message}`
+  );
+}
+
+async function postRequest<T>(endpoint: string, body: Record<string, unknown>): Promise<T> {
+  const isAbsoluteBase = /^https?:\/\//.test(BASE_URL);
+  const url = isAbsoluteBase
+    ? new URL(`${BASE_URL}${endpoint}`)
+    : new URL(`${BASE_URL}${endpoint}`, window.location.origin);
+
+  let lastNetworkError: unknown = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const raw = await res.text();
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          await sleep(RETRY_DELAY_MS * (attempt + 1));
+          continue;
+        }
+        throw new Error(`API Error ${res.status} from ${url.pathname}: ${raw || 'Unknown backend error'}`);
       }
 
       return res.json();
@@ -218,4 +273,12 @@ export const api = {
     if (confidence !== undefined) params.confidence = confidence.toString();
     return request<AiExplainStrategyResponse>('/ai/explain-strategy', params);
   },
+
+  /** Chat with beginner-friendly Gemini assistant */
+  chatWithAssistant: (message: string, chain?: string, context?: string) =>
+    postRequest<AiChatResponse>('/ai/chat', {
+      message,
+      chain,
+      context,
+    }),
 };
