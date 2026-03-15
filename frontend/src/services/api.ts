@@ -71,6 +71,21 @@ export interface AiChatResponse {
   };
 }
 
+export interface GasTimingResponse {
+  current_gas: number;
+  average_gas: number;
+  status: 'HIGH' | 'LOW';
+  recommended_action: string;
+  recommended_wait_time: string;
+  estimated_current_cost: number;
+  estimated_optimal_cost: number;
+  expected_savings: number;
+  gas_used?: number;
+  eth_price?: number;
+  hourly_averages?: Array<{ hour: number; average_gas: number; count: number }>;
+  history?: Array<{ timestamp: number; gas_price: number }>;
+}
+
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
   const isAbsoluteBase = /^https?:\/\//.test(BASE_URL);
   const url = isAbsoluteBase
@@ -181,6 +196,9 @@ export const api = {
   /** Fetch current gas prices */
   getGas: () => request<any>('/gas'),
 
+  /** Fetch gas timing optimizer recommendation */
+  getGasTiming: () => request<GasTimingResponse>('/gas-timing'),
+
   /** Fetch token prices */
   getPrices: () => request<any>('/prices'),
 
@@ -230,6 +248,21 @@ export const api = {
     if (chain) params.chain = chain;
     return request<any>('/recommendation', params);
   },
+
+  /** Schedule migration when gas is below user threshold */
+  scheduleMigration: (walletAddress: string, targetPool: string, gasThreshold: number) =>
+    postRequest<any>('/schedule-migration', {
+      wallet_address: walletAddress,
+      target_pool: targetPool,
+      gas_threshold: gasThreshold,
+    }),
+
+  /** Register gas alert threshold */
+  createGasAlert: (walletAddress: string, gasThreshold: number) =>
+    postRequest<any>('/gas-alert', {
+      wallet_address: walletAddress,
+      gas_threshold: gasThreshold,
+    }),
 
   /** Compare pools for strategy analysis */
   getCompare: (amount: number, chain?: string, token?: string, limit: number = 5) => {

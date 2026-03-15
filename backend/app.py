@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import logging
 import math
 import json
+import time
 import os
 import subprocess
 from pathlib import Path
@@ -12,7 +13,7 @@ import uvicorn
 
 from config import settings
 from aggregator.fetch_pools import fetch_all_pools
-from aggregator.fetch_gas import get_gas_price
+from aggregator.fetch_gas import get_gas_price, get_gas_history_summary
 from aggregator.price_feeds import get_token_prices
 from aggregator.historical_data import get_historical_rates
 from engine.net_yield import compute_net_yields
@@ -25,6 +26,10 @@ from services.gemini_explainer import explain_strategy, chat_with_gemini
 logger = logging.getLogger(__name__)
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
+MIGRATION_GAS_USED = 200000
+
+_scheduled_migrations: list[dict] = []
+_gas_alerts: list[dict] = []
 
 
 class AiChatRequest(BaseModel):
@@ -34,6 +39,17 @@ class AiChatRequest(BaseModel):
     amount: float = 10000.0
     current_protocol: str = "aave"
     current_token: str = "USDC"
+
+
+class ScheduleMigrationRequest(BaseModel):
+    wallet_address: str
+    target_pool: str
+    gas_threshold: float
+
+
+class GasAlertRequest(BaseModel):
+    wallet_address: str
+    gas_threshold: float
 
 
 async def _build_assistant_context(
@@ -107,6 +123,8 @@ async def _build_assistant_context(
             ],
         }
 
+    gas_timing = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data)
+
     return {
         "chain": chain or "ethereum",
         "amount": amount,
@@ -121,6 +139,59 @@ async def _build_assistant_context(
         "pools": pool_items,
         "migration_recommendation": migration,
         "ai_strategy_output": strategy_summary,
+        "gas_timing": gas_timing,
+    }
+
+
+def _estimate_wait_time(current_gas: float, avg_gas: float, hourly_averages: list[dict]) -> str:
+    if current_gas <= avg_gas:
+        return "Now"
+
+    # Prefer the next hourly window below daily average if one exists.
+    if hourly_averages:
+        current_hour = int(time.gmtime().tm_hour)
+        for offset in range(1, 25):
+            hour = (current_hour + offset) % 24
+            match = next((h for h in hourly_averages if int(h.get("hour", -1)) == hour), None)
+            if match and float(match.get("average_gas", 0) or 0) <= avg_gas:
+                return f"{offset} hour" if offset == 1 else f"{offset} hours"
+
+    pressure = max((current_gas - avg_gas) / max(avg_gas, 1.0), 0)
+    fallback_hours = max(1, min(8, int(round(pressure * 4))))
+    return f"{fallback_hours} hour" if fallback_hours == 1 else f"{fallback_hours} hours"
+
+
+def _build_gas_timing_payload(
+    gas_data: dict,
+    price_data: dict,
+) -> dict:
+    current_gas = float(gas_data.get("standard", 0) or 0)
+    eth_price = float(((price_data.get("prices", {}).get("ETH", {}) or {}).get("price", 0)) or 0)
+
+    summary = get_gas_history_summary(hours=24)
+    avg_gas = float(summary.get("daily_average", current_gas) or current_gas)
+
+    current_cost = (MIGRATION_GAS_USED * current_gas * eth_price) / 1e9
+    avg_cost = (MIGRATION_GAS_USED * avg_gas * eth_price) / 1e9
+    status = "HIGH" if current_gas > avg_gas else "LOW"
+
+    recommended_action = "Wait before migrating" if status == "HIGH" else "Good time to migrate"
+    wait_time = _estimate_wait_time(current_gas, avg_gas, summary.get("hourly_averages", []))
+    expected_savings = max(current_cost - avg_cost, 0)
+
+    return {
+        "current_gas": round(current_gas, 2),
+        "average_gas": round(avg_gas, 2),
+        "status": status,
+        "recommended_action": recommended_action,
+        "recommended_wait_time": wait_time,
+        "estimated_current_cost": round(current_cost, 2),
+        "estimated_optimal_cost": round(avg_cost, 2),
+        "expected_savings": round(expected_savings, 2),
+        "gas_used": MIGRATION_GAS_USED,
+        "eth_price": round(eth_price, 2),
+        "hourly_averages": summary.get("hourly_averages", []),
+        "history": summary.get("samples", []),
     }
 
 
@@ -316,6 +387,58 @@ async def gas():
     except Exception as exc:
         logger.exception("/gas failed")
         raise HTTPException(status_code=502, detail=f"Failed to fetch gas data: {exc}") from exc
+
+
+@app.get("/gas-timing")
+async def gas_timing():
+    """Return gas timing recommendation for migration windows."""
+    try:
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        payload = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data)
+        return payload
+    except Exception as exc:
+        logger.exception("/gas-timing failed")
+        raise HTTPException(status_code=502, detail=f"Failed to compute gas timing: {exc}") from exc
+
+
+@app.post("/schedule-migration")
+async def schedule_migration(payload: ScheduleMigrationRequest):
+    """Store migration schedule intent until gas drops below user threshold."""
+    gas_data = await get_gas_price()
+    current_gas = float(gas_data.get("standard", 0) or 0)
+
+    schedule = {
+        "wallet_address": payload.wallet_address,
+        "target_pool": payload.target_pool,
+        "gas_threshold": payload.gas_threshold,
+        "current_gas": current_gas,
+        "scheduled": current_gas > payload.gas_threshold,
+    }
+    _scheduled_migrations.append(schedule)
+
+    return {
+        **schedule,
+        "message": (
+            "Migration condition met now; you can migrate immediately."
+            if current_gas <= payload.gas_threshold
+            else "Migration scheduled. We will trigger notification when gas is below threshold."
+        ),
+    }
+
+
+@app.post("/gas-alert")
+async def gas_alert(payload: GasAlertRequest):
+    """Store user gas alert threshold."""
+    alert = {
+        "wallet_address": payload.wallet_address,
+        "gas_threshold": payload.gas_threshold,
+    }
+    _gas_alerts.append(alert)
+    return {
+        **alert,
+        "message": "Gas alert registered.",
+    }
 
 
 # ──────────────────────────────────────────────

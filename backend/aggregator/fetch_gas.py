@@ -8,6 +8,7 @@ Fallback: Direct RPC eth_gasPrice call.
 
 import time
 import logging
+from datetime import datetime
 import httpx
 from config import settings
 
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 DEFAULT_SAFE_GWEI = 15.0
 DEFAULT_STANDARD_GWEI = 20.0
 DEFAULT_FAST_GWEI = 28.0
+SNAPSHOT_INTERVAL_SECONDS = 300
+HISTORY_RETENTION_SECONDS = 24 * 60 * 60
+
+_gas_history: list[dict] = []
 
 
 async def get_gas_price() -> dict:
@@ -33,9 +38,75 @@ async def get_gas_price() -> dict:
         logger.warning("RPC gas fetch also failed; using default safe fallback gas values")
         gas_data = _default_gas_fallback()
 
+    _record_gas_snapshot(float(gas_data.get("standard", DEFAULT_STANDARD_GWEI) or DEFAULT_STANDARD_GWEI))
+
     _cache["data"] = gas_data
     _cache["ts"] = now
     return gas_data
+
+
+def _record_gas_snapshot(gas_price_gwei: float) -> None:
+    now = int(time.time())
+    if _gas_history and (now - int(_gas_history[-1]["timestamp"])) < SNAPSHOT_INTERVAL_SECONDS:
+        return
+
+    _gas_history.append(
+        {
+            "timestamp": now,
+            "gas_price": float(gas_price_gwei),
+        }
+    )
+    _prune_history(now)
+
+
+def _prune_history(now_ts: int | None = None) -> None:
+    now = now_ts or int(time.time())
+    min_ts = now - HISTORY_RETENTION_SECONDS
+    while _gas_history and int(_gas_history[0]["timestamp"]) < min_ts:
+        _gas_history.pop(0)
+
+
+def get_gas_history(hours: int = 24) -> list[dict]:
+    """Return gas snapshots for the last N hours."""
+    now = int(time.time())
+    _prune_history(now)
+    min_ts = now - max(1, int(hours)) * 3600
+    return [entry for entry in _gas_history if int(entry["timestamp"]) >= min_ts]
+
+
+def get_gas_history_summary(hours: int = 24) -> dict:
+    """Return daily and hourly gas averages from in-memory snapshot history."""
+    history = get_gas_history(hours=hours)
+    if not history:
+        return {
+            "daily_average": DEFAULT_STANDARD_GWEI,
+            "hourly_averages": [],
+            "samples": [],
+            "sample_count": 0,
+        }
+
+    daily_average = sum(float(x["gas_price"]) for x in history) / len(history)
+
+    buckets: dict[int, list[float]] = {}
+    for entry in history:
+        hour = datetime.utcfromtimestamp(int(entry["timestamp"])) .hour
+        buckets.setdefault(hour, []).append(float(entry["gas_price"]))
+
+    hourly_averages = [
+        {
+            "hour": hour,
+            "average_gas": round(sum(values) / len(values), 2),
+            "count": len(values),
+        }
+        for hour, values in sorted(buckets.items(), key=lambda item: item[0])
+    ]
+
+    return {
+        "daily_average": round(daily_average, 2),
+        "hourly_averages": hourly_averages,
+        "samples": history,
+        "sample_count": len(history),
+    }
 
 
 async def _fetch_from_etherscan() -> dict | None:

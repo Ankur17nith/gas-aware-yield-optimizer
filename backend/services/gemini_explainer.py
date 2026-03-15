@@ -58,6 +58,15 @@ BLOCKCHAIN_KEYWORDS = [
     "defi",
 ]
 
+GAS_TIMING_KEYWORDS = [
+    "when should i migrate",
+    "when to migrate",
+    "how much will gas cost",
+    "why is gas high",
+    "gas timing",
+    "best time to migrate",
+]
+
 
 def _get_model():
     global _model, _client
@@ -300,6 +309,50 @@ def _fallback_non_strategy_answer(user_message: str, question_type: str) -> dict
     }
 
 
+def _is_gas_timing_question(message: str) -> bool:
+    text = (message or "").strip().lower()
+    return any(k in text for k in GAS_TIMING_KEYWORDS)
+
+
+def _gas_timing_response(gas_timing: dict | None) -> dict | None:
+    if not isinstance(gas_timing, dict) or not gas_timing:
+        return None
+
+    current_gas = float(gas_timing.get("current_gas", 0) or 0)
+    avg_gas = float(gas_timing.get("average_gas", 0) or 0)
+    status = str(gas_timing.get("status", "LOW")).upper()
+    wait_time = str(gas_timing.get("recommended_wait_time", "Now"))
+    current_cost = float(gas_timing.get("estimated_current_cost", 0) or 0)
+    optimal_cost = float(gas_timing.get("estimated_optimal_cost", 0) or 0)
+    savings = float(gas_timing.get("expected_savings", 0) or 0)
+
+    answer = (
+        f"Current gas is {current_gas:.0f} gwei, while the daily average is {avg_gas:.0f} gwei. "
+        f"Status is {status}. Migrating now may cost about ${current_cost:.2f}. "
+        f"If you wait around {wait_time}, cost could be closer to ${optimal_cost:.2f}, "
+        f"with potential savings of about ${savings:.2f}."
+    )
+
+    return {
+        "answer": answer,
+        "recommended_pool": None,
+        "reason": "Gas timing analysis from live backend gas and ETH price data.",
+        "risk": "Gas can change quickly with network activity.",
+        "gas_impact": (
+            f"Estimated migration gas cost is ${current_cost:.2f} now vs ${optimal_cost:.2f} near average conditions."
+        ),
+        "migration_advice": (
+            "Good time to migrate now."
+            if status == "LOW"
+            else f"Wait about {wait_time} if you want to reduce gas cost."
+        ),
+        "notes": [
+            "This response is powered by /gas-timing backend analysis.",
+        ],
+        "question_type": "platform",
+    }
+
+
 def chat_with_gemini(
     user_message: str,
     pool_context: dict | None = None,
@@ -309,8 +362,14 @@ def chat_with_gemini(
     """Return a concise, data-grounded response for DeFi copilot chat assistant."""
     context_obj = pool_context or {}
     pools = context_obj.get("pools", []) if isinstance(context_obj, dict) else []
+    gas_timing_ctx = context_obj.get("gas_timing") if isinstance(context_obj, dict) else None
     question_type = _classify_question_type(user_message)
     should_recommend = question_type == "strategy"
+
+    if _is_gas_timing_question(user_message):
+        gas_reply = _gas_timing_response(gas_timing_ctx)
+        if gas_reply:
+            return gas_reply
 
     def _context_top_pool() -> dict:
         if not isinstance(pools, list) or not pools:
@@ -443,6 +502,7 @@ question_type
 Context:
 - Active chain: {chain or 'unknown'}
 - App context: {context or 'none'}
+- Gas timing context JSON: {json.dumps(gas_timing_ctx, ensure_ascii=True)}
 - Pool context JSON: {json.dumps(context_obj, ensure_ascii=True)}
 
 User question:

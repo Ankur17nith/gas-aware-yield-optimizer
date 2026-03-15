@@ -28,6 +28,7 @@ import ActivityFeed from './ActivityFeed';
 import ContractStatusPanel from './ContractStatusPanel';
 import SourceBadges from './SourceBadges';
 import BeginnerChatWidget from './BeginnerChatWidget';
+import GasTimingOptimizerCard from './GasTimingOptimizerCard';
 import { SkeletonCard, SkeletonTable } from './Skeleton';
 import { formatUSD, formatAPY, formatCompact } from '../utils/format';
 import {
@@ -492,6 +493,13 @@ export default function Dashboard() {
                   depositAmount={depositAmount}
                   selectedChain={selectedChain}
                   onApplyRecommendation={handleApplyAgentStrategy}
+                />
+              </div>
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <GasTimingOptimizerCard
+                  walletAddress={wallet.address || undefined}
+                  targetPool={topPool?.pool_id || topPool?.pool_name || topPool?.protocol}
                 />
               </div>
 
