@@ -213,6 +213,35 @@ export const api = {
     return request<any>('/migration', params);
   },
 
+  /** Fetch recommendation (compat alias for migration) */
+  getRecommendation: (
+    protocol: string,
+    token: string,
+    amount: number,
+    chain?: string,
+    gasThresholdGwei?: number
+  ) => {
+    const params: Record<string, string> = {
+      current_protocol: protocol,
+      current_token: token,
+      amount: amount.toString(),
+    };
+    if (gasThresholdGwei !== undefined) params.gas_threshold_gwei = gasThresholdGwei.toString();
+    if (chain) params.chain = chain;
+    return request<any>('/recommendation', params);
+  },
+
+  /** Compare pools for strategy analysis */
+  getCompare: (amount: number, chain?: string, token?: string, limit: number = 5) => {
+    const params: Record<string, string> = {
+      amount: amount.toString(),
+      limit: limit.toString(),
+    };
+    if (chain) params.chain = chain;
+    if (token) params.token = token;
+    return request<{ pools: any[]; count: number; amount: number }>('/compare', params);
+  },
+
   /** Check auto-rebalance recommendation */
   getAutoRebalance: (
     protocol: string,

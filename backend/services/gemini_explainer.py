@@ -218,6 +218,8 @@ def _fallback_non_strategy_answer(user_message: str, question_type: str) -> dict
             answer = (
                 "Net APY is your realistic return after costs. In this platform, we estimate it as:\n"
                 "Net APY = Gross APY - Gas Impact - Protocol Fees.\n\n"
+                "Gas Impact = (Gas Cost / Deposit Value) x 100.\n"
+                "30 Day Profit = Deposit x Net APY x (30 / 365).\n\n"
                 "Example: if Gross APY is 8.0%, Gas Impact is 0.4%, and fees are 0.2%, Net APY is 7.4%.\n\n"
                 "This helps you compare pools based on what you may actually keep, not headline APY."
             )
@@ -230,7 +232,10 @@ def _fallback_non_strategy_answer(user_message: str, question_type: str) -> dict
         else:
             answer = (
                 "This platform compares DeFi pools using live data, then adjusts returns for costs.\n\n"
-                "Definition: it is a gas-aware yield optimizer, so it focuses on net APY rather than only gross APY.\n"
+                "Net APY = Gross APY - Gas Impact - Protocol Fees.\n"
+                "Gas Impact = (Gas Cost / Deposit Value) x 100.\n"
+                "30 Day Profit = Deposit x Net APY x (30 / 365).\n"
+                "Migration is typically beneficial when (Net APY Target - Net APY Current) is greater than gas impact.\n\n"
                 "Example: a pool with lower gross APY can still win if gas costs are much lower.\n\n"
                 "This helps users make clearer migration decisions with real trading friction included."
             )

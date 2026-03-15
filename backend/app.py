@@ -417,6 +417,74 @@ async def migration(
     return recommendation
 
 
+@app.get("/recommendation")
+async def recommendation(
+    current_protocol: str = "aave",
+    current_token: str = "USDC",
+    amount: float = 10000.0,
+    gas_threshold_gwei: float = 20.0,
+    chain: str | None = None,
+):
+    """Compatibility alias for migration recommendation endpoint."""
+    return await migration(
+        current_protocol=current_protocol,
+        current_token=current_token,
+        amount=amount,
+        gas_threshold_gwei=gas_threshold_gwei,
+        chain=chain,
+    )
+
+
+@app.get("/compare")
+async def compare(
+    amount: float = 10000.0,
+    chain: str | None = None,
+    token: str | None = None,
+    limit: int = 5,
+):
+    """Return side-by-side pool comparison data ranked by net APY."""
+    try:
+        pool_data = await fetch_all_pools(chain)
+        gas_data = await get_gas_price()
+        price_data = await get_token_prices()
+        net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
+        ranked = rank_pools(net_yields)
+
+        if token:
+            ranked = [p for p in ranked if str(p.get("token", "")).upper() == token.upper()]
+
+        compared: list[dict] = []
+        for p in ranked[: max(limit, 1)]:
+            compared.append(
+                {
+                    "protocol": p.get("protocol", ""),
+                    "pool_name": p.get("pool_name") or p.get("pool_meta") or p.get("pool_id", ""),
+                    "token": p.get("token", ""),
+                    "gross_apy": round(float(p.get("gross_apy", p.get("apy", 0)) or 0), 4),
+                    "net_apy": round(float(p.get("net_apy", 0) or 0), 4),
+                    "tvl": round(float(p.get("tvl", 0) or 0), 2),
+                    "risk": p.get("risk_level", "Medium"),
+                    "gas_impact": round(float(p.get("gas_impact_pct", 0) or 0), 6),
+                }
+            )
+
+        return {
+            "token_filter": token.upper() if token else None,
+            "amount": amount,
+            "count": len(compared),
+            "pools": compared,
+            "sources": {
+                "apy": "DefiLlama",
+                "tvl": "DefiLlama",
+                "prices": price_data.get("source", "coingecko"),
+                "gas": gas_data.get("source", "etherscan/rpc"),
+            },
+        }
+    except Exception as exc:
+        logger.exception("/compare failed")
+        raise HTTPException(status_code=502, detail=f"Failed to compare pools: {exc}") from exc
+
+
 @app.get("/auto-rebalance")
 async def auto_rebalance(
     current_protocol: str = "aave",
