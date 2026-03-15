@@ -66,7 +66,12 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
   }
 
   const high = data.status === 'HIGH';
-  const history = Array.isArray(data.history) ? data.history : [];
+  const trend = (data as any).trend;
+  const history = Array.isArray(data.history)
+    ? data.history
+    : Array.isArray(trend)
+      ? trend.map((x: any) => ({ timestamp: x.timestamp, gas_price: x.gas }))
+      : [];
   const averageGas = data.daily_average ?? data.average_gas;
   const updatedText = data.last_updated
     ? new Date(data.last_updated).toUTCString().replace('GMT', 'UTC')

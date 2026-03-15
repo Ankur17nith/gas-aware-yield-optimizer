@@ -76,9 +76,12 @@ export interface GasTimingResponse {
   daily_average?: number;
   average_gas: number;
   status: 'HIGH' | 'LOW';
+  recommended_wait?: string;
   recommended_action: string;
   recommended_wait_time: string;
+  current_cost?: number;
   estimated_current_cost: number;
+  average_cost?: number;
   estimated_average_cost?: number;
   estimated_optimal_cost: number;
   expected_savings: number;
@@ -87,6 +90,7 @@ export interface GasTimingResponse {
   gas_used?: number;
   eth_price?: number;
   hourly_averages?: Array<{ hour: number; average_gas: number; count: number }>;
+  trend?: Array<{ timestamp: number; gas: number }>;
   history?: Array<{ timestamp: number; gas_price: number }>;
 }
 
