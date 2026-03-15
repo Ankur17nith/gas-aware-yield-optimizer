@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api, type GasTimingResponse } from '../services/api';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 
 interface Props {
   walletAddress?: string;
@@ -58,6 +67,15 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
 
   const high = data.status === 'HIGH';
   const history = Array.isArray(data.history) ? data.history : [];
+  const averageGas = data.daily_average ?? data.average_gas;
+  const updatedText = data.last_updated
+    ? new Date(data.last_updated).toUTCString().replace('GMT', 'UTC')
+    : 'Unavailable';
+
+  const chartData = history.slice(-288).map((h) => ({
+    time: new Date(h.timestamp * 1000).toISOString().slice(11, 16),
+    gas: Number(h.gas_price || 0),
+  }));
 
   return (
     <section style={S.card}>
@@ -66,24 +84,31 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
           <div style={S.title}>Gas Timing Optimizer</div>
           <div style={S.subtle}>Best migration timing based on 24h gas behavior</div>
         </div>
-        <span style={{ ...S.statusPill, ...(high ? S.high : S.low) }}>{data.status}</span>
+        <div style={S.headMeta}>
+          <span style={S.liveBadge}><span style={S.liveDot} /> Live Data</span>
+          <span style={{ ...S.statusPill, ...(high ? S.high : S.low) }}>{data.status}</span>
+        </div>
       </div>
 
       <div style={S.grid}>
         <Metric label="Current Gas" value={`${data.current_gas.toFixed(0)} gwei`} />
-        <Metric label="Daily Average" value={`${data.average_gas.toFixed(0)} gwei`} />
+        <Metric label="24h Average" value={`${averageGas.toFixed(0)} gwei`} />
         <Metric label="Best Migration Time" value={`~${data.recommended_wait_time}`} />
         <Metric label="Expected Savings" value={`$${data.expected_savings.toFixed(2)}`} />
       </div>
 
+      <div style={S.metaLine}>
+        Source: {data.data_source || 'Etherscan Gas Tracker'} | Last Updated: {updatedText}
+      </div>
+
       <div style={S.costLine}>
-        Estimated Gas Cost: ${data.estimated_current_cost.toFixed(2)} now vs ${data.estimated_optimal_cost.toFixed(2)} near average conditions.
+        Estimated Gas Cost: ${data.estimated_current_cost.toFixed(2)} now vs ${(data.estimated_average_cost ?? data.estimated_optimal_cost).toFixed(2)} near average conditions.
       </div>
 
       <div style={S.chartWrap}>
         <div style={S.chartTitle}>24h Gas Trend</div>
-        {history.length >= 2 ? (
-          <GasTrendChart history={history} />
+        {chartData.length >= 2 ? (
+          <GasTrendChart chartData={chartData} />
         ) : (
           <div style={S.chartEmpty}>Collecting gas snapshots. Trend will appear after more samples.</div>
         )}
@@ -99,37 +124,34 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
   );
 }
 
-function GasTrendChart({ history }: { history: Array<{ timestamp: number; gas_price: number }> }) {
-  const width = 520;
-  const height = 130;
-  const padX = 8;
-  const padY = 10;
-
-  const points = history.slice(-288); // 24h at 5m cadence (or latest available samples)
-  const min = Math.min(...points.map((p) => p.gas_price));
-  const max = Math.max(...points.map((p) => p.gas_price));
-  const range = Math.max(max - min, 1);
-
-  const line = points
-    .map((p, i) => {
-      const x = padX + (i * (width - padX * 2)) / Math.max(points.length - 1, 1);
-      const y = height - padY - ((p.gas_price - min) / range) * (height - padY * 2);
-      return `${x},${y}`;
-    })
-    .join(' ');
-
+function GasTrendChart({ chartData }: { chartData: Array<{ time: string; gas: number }> }) {
+  const min = Math.min(...chartData.map((p) => p.gas));
+  const max = Math.max(...chartData.map((p) => p.gas));
+  const latest = chartData[chartData.length - 1]?.gas ?? 0;
   return (
     <div style={S.chartContainer}>
-      <svg viewBox={`0 0 ${width} ${height}`} style={S.chartSvg} role="img" aria-label="24 hour gas trend">
-        <rect x="0" y="0" width={width} height={height} fill="transparent" />
-        <line x1={padX} y1={padY} x2={padX} y2={height - padY} stroke="var(--border)" strokeWidth="1" />
-        <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="var(--border)" strokeWidth="1" />
-        <polyline fill="none" stroke="var(--primary)" strokeWidth="2" points={line} />
-      </svg>
+      <div style={S.chartSvg}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="time" tick={{ fill: 'var(--text-3)', fontSize: 10 }} minTickGap={28} />
+            <YAxis tick={{ fill: 'var(--text-3)', fontSize: 10 }} width={38} />
+            <Tooltip
+              contentStyle={{
+                background: 'var(--card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+            <Line type="monotone" dataKey="gas" stroke="var(--primary)" strokeWidth={2} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
       <div style={S.chartLegend}>
         <span>Min: {min.toFixed(1)} gwei</span>
         <span>Max: {max.toFixed(1)} gwei</span>
-        <span>Latest: {points[points.length - 1].gas_price.toFixed(1)} gwei</span>
+        <span>Latest: {latest.toFixed(1)} gwei</span>
       </div>
     </div>
   );
@@ -156,6 +178,30 @@ const S: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
+  },
+  headMeta: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+  },
+  liveBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    border: '1px solid rgba(34,197,94,0.35)',
+    background: 'rgba(34,197,94,0.1)',
+    color: 'var(--success)',
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.04em',
+    padding: '3px 8px',
+  },
+  liveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: '50%',
+    background: 'var(--success)',
   },
   title: {
     color: 'var(--text-1)',
@@ -214,6 +260,11 @@ const S: Record<string, React.CSSProperties> = {
     fontSize: 12,
     color: 'var(--text-2)',
     lineHeight: 1.45,
+  },
+  metaLine: {
+    marginTop: 8,
+    fontSize: 11,
+    color: 'var(--text-3)',
   },
   chartWrap: {
     marginTop: 12,

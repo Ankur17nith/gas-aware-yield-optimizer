@@ -480,7 +480,13 @@ export default function Dashboard() {
                       <StatCard label="Best Net APY" value={topPool ? formatAPY(topPool.net_apy ?? topPool.apy) : '—'} sub={topPool ? `${topPool.protocol} · ${topPool.token}` : ''} color="var(--success)" />
                       <StatCard label="Pools Tracked" value={String(filteredPools.length)} sub="Across DeFi protocols" />
                       <StatCard label="Avg Gas Cost" value={formatUSD(avgGas)} sub="Approve + Deposit avg" />
-                      <StatCard label="30d Projection" value={topPool ? formatUSD(topPool.profit_30d ?? 0) : '—'} sub={`On ${formatCompact(depositAmount)} deposit`} color="var(--success)" />
+                      <StatCard
+                        label="30d Projection"
+                        value={topPool ? formatUSD(topPool.profit_30d ?? 0) : '—'}
+                        sub={`On ${formatCompact(depositAmount)} deposit`}
+                        color="var(--success)"
+                        tooltip="Estimated profit = Deposit × Net APY × (30 / 365)"
+                      />
                     </>
                   )}
                 </div>
@@ -674,9 +680,21 @@ export default function Dashboard() {
 }
 
 /* ── Sub-components ── */
-function StatCard({ label, value, sub, color }: { label: string; value: string; sub: string; color?: string }) {
+function StatCard({
+  label,
+  value,
+  sub,
+  color,
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  color?: string;
+  tooltip?: string;
+}) {
   return (
-    <div className="card-hover" style={S.statCard}>
+    <div className="card-hover" style={S.statCard} title={tooltip}>
       <span style={S.statLabel}>{label}</span>
       <span style={{ ...S.statValue, color: color || 'var(--text-1)' }}>{value}</span>
       <span style={S.statSub}>{sub}</span>

@@ -73,13 +73,17 @@ export interface AiChatResponse {
 
 export interface GasTimingResponse {
   current_gas: number;
+  daily_average?: number;
   average_gas: number;
   status: 'HIGH' | 'LOW';
   recommended_action: string;
   recommended_wait_time: string;
   estimated_current_cost: number;
+  estimated_average_cost?: number;
   estimated_optimal_cost: number;
   expected_savings: number;
+  data_source?: string;
+  last_updated?: string;
   gas_used?: number;
   eth_price?: number;
   hourly_averages?: Array<{ hour: number; average_gas: number; count: number }>;

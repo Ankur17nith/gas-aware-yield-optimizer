@@ -19,7 +19,19 @@ interface Props {
   onPoolClick?: (pool: Pool) => void;
 }
 
-type SortKey = 'rank' | 'protocol' | 'pool_name' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score';
+type SortKey = 'rank' | 'protocol' | 'pool_name' | 'token' | 'gross_apy' | 'gas_cost_usd' | 'net_apy' | 'tvl' | 'risk_score' | 'trust_score';
+
+function getTrustScore(pool: Pool): number {
+  if (typeof pool.trust_score === 'number' && Number.isFinite(pool.trust_score)) {
+    return Math.max(0, Math.min(100, Math.round(pool.trust_score)));
+  }
+
+  const tvl = Number(pool.tvl ?? 0);
+  const tvlScore = Math.max(0, Math.min(50, Math.log10(Math.max(tvl, 1)) * 8));
+  const riskPenalty = pool.risk_level === 'High' ? 18 : pool.risk_level === 'Medium' ? 8 : 0;
+  const base = 42 + tvlScore - riskPenalty;
+  return Math.max(0, Math.min(100, Math.round(base)));
+}
 
 export default function PoolTable({ pools, predictions, loading, error, onMigrate, onWhyThisPool, onPoolClick }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('net_apy');
@@ -41,11 +53,11 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
       const av = sortKey === 'protocol' ? a.protocol : sortKey === 'pool_name' ? (a.pool_name || a.pool_meta || '') : sortKey === 'token' ? a.token
         : sortKey === 'gross_apy' ? (a.gross_apy ?? a.apy ?? 0) : sortKey === 'gas_cost_usd' ? (a.gas_cost_usd ?? 0)
         : sortKey === 'net_apy' ? (a.net_apy ?? a.apy ?? 0) : sortKey === 'tvl' ? (a.tvl ?? 0)
-        : sortKey === 'risk_score' ? (a.risk_score ?? 0) : (a.rank ?? 0);
+        : sortKey === 'risk_score' ? (a.risk_score ?? 0) : sortKey === 'trust_score' ? getTrustScore(a) : (a.rank ?? 0);
       const bv = sortKey === 'protocol' ? b.protocol : sortKey === 'pool_name' ? (b.pool_name || b.pool_meta || '') : sortKey === 'token' ? b.token
         : sortKey === 'gross_apy' ? (b.gross_apy ?? b.apy ?? 0) : sortKey === 'gas_cost_usd' ? (b.gas_cost_usd ?? 0)
         : sortKey === 'net_apy' ? (b.net_apy ?? b.apy ?? 0) : sortKey === 'tvl' ? (b.tvl ?? 0)
-        : sortKey === 'risk_score' ? (b.risk_score ?? 0) : (b.rank ?? 0);
+        : sortKey === 'risk_score' ? (b.risk_score ?? 0) : sortKey === 'trust_score' ? getTrustScore(b) : (b.rank ?? 0);
       if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
       return ((av as number) - (bv as number)) * dir;
     });
@@ -62,7 +74,7 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
   const cols: { label: string; key: SortKey | '' }[] = [
     { label: '#', key: 'rank' }, { label: 'Protocol', key: 'protocol' }, { label: 'Pool', key: 'pool_name' }, { label: 'Token', key: 'token' },
     { label: 'Gross APY', key: 'gross_apy' }, { label: 'Gas Cost', key: 'gas_cost_usd' },
-    { label: 'Net APY', key: 'net_apy' }, { label: 'Risk', key: 'risk_score' }, { label: 'TVL', key: 'tvl' },
+    { label: 'Net APY', key: 'net_apy' }, { label: 'Risk', key: 'risk_score' }, { label: 'Trust', key: 'trust_score' }, { label: 'TVL', key: 'tvl' },
     { label: 'AI Prediction', key: '' }, { label: 'Actions', key: '' },
   ];
 
@@ -150,6 +162,11 @@ export default function PoolTable({ pools, predictions, loading, error, onMigrat
                           : 'var(--danger)',
                     }}>
                       {pool.risk_level ?? 'Medium'}
+                    </span>
+                  </td>
+                  <td style={styles.td}>
+                    <span style={styles.trustBadge} title="Trust score blends protocol reputation, TVL depth, and risk profile.">
+                      {getTrustScore(pool)} / 100
                     </span>
                   </td>
                   <td style={styles.td}>{formatCompact(pool.tvl)}</td>
@@ -257,6 +274,16 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '2px 8px',
     fontSize: 11,
     fontWeight: 700,
+  },
+  trustBadge: {
+    display: 'inline-block',
+    borderRadius: 6,
+    padding: '2px 8px',
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#0ea5e9',
+    background: 'rgba(14, 165, 233, 0.14)',
+    border: '1px solid rgba(14, 165, 233, 0.32)',
   },
   predCell: { display: 'flex', alignItems: 'center', gap: 6 },
   actionRow: { display: 'flex', gap: 8 },

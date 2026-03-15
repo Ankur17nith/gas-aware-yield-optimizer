@@ -1,7 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+import asyncio
 import logging
 import math
 import json
@@ -154,11 +155,13 @@ def _estimate_wait_time(current_gas: float, avg_gas: float, hourly_averages: lis
             hour = (current_hour + offset) % 24
             match = next((h for h in hourly_averages if int(h.get("hour", -1)) == hour), None)
             if match and float(match.get("average_gas", 0) or 0) <= avg_gas:
-                return f"{offset} hour" if offset == 1 else f"{offset} hours"
+                # Include half-hour fractional precision for better timing guidance.
+                frac_hours = max(0.5, offset - 0.5)
+                return f"{frac_hours:.1f} hours"
 
     pressure = max((current_gas - avg_gas) / max(avg_gas, 1.0), 0)
-    fallback_hours = max(1, min(8, int(round(pressure * 4))))
-    return f"{fallback_hours} hour" if fallback_hours == 1 else f"{fallback_hours} hours"
+    fallback_hours = max(0.5, min(8.0, round(pressure * 4, 1)))
+    return f"{fallback_hours:.1f} hours"
 
 
 def _build_gas_timing_payload(
@@ -181,18 +184,36 @@ def _build_gas_timing_payload(
 
     return {
         "current_gas": round(current_gas, 2),
+        "daily_average": round(avg_gas, 2),
         "average_gas": round(avg_gas, 2),
         "status": status,
         "recommended_action": recommended_action,
         "recommended_wait_time": wait_time,
         "estimated_current_cost": round(current_cost, 2),
+        "estimated_average_cost": round(avg_cost, 2),
         "estimated_optimal_cost": round(avg_cost, 2),
         "expected_savings": round(expected_savings, 2),
         "gas_used": MIGRATION_GAS_USED,
         "eth_price": round(eth_price, 2),
+        "data_source": (
+            "Etherscan Gas Tracker"
+            if str(gas_data.get("source", "")).lower() == "etherscan"
+            else "Ethereum RPC"
+        ),
+        "last_updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "hourly_averages": summary.get("hourly_averages", []),
         "history": summary.get("samples", []),
     }
+
+
+async def _gas_history_sampler() -> None:
+    """Background task that captures gas snapshots every 5 minutes."""
+    while True:
+        try:
+            await get_gas_price()
+        except Exception as exc:
+            logger.warning("Gas history sampler tick failed: %s", exc)
+        await asyncio.sleep(300)
 
 
 def _run_adk_strategy(
@@ -317,7 +338,13 @@ def _projected_apy(pool: dict) -> float:
 async def lifespan(app: FastAPI):
     """Load the AI model on startup."""
     app.state.model = load_model(settings.MODEL_PATH)
-    yield
+    sampler_task = asyncio.create_task(_gas_history_sampler())
+    try:
+        yield
+    finally:
+        sampler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await sampler_task
 
 
 app = FastAPI(
@@ -774,6 +801,15 @@ async def ai_chat(payload: AiChatRequest):
             current_token=payload.current_token,
             pool_limit=15,
         )
+
+        msg = (payload.message or "").lower()
+        if any(
+            term in msg
+            for term in ["when should i migrate", "when to migrate", "why is gas high", "how much will gas cost", "gas timing"]
+        ):
+            # Explicitly source gas timing analysis from the dedicated endpoint flow.
+            assistant_context["gas_timing"] = await gas_timing()
+
         chat_payload = chat_with_gemini(
             user_message=payload.message,
             pool_context=assistant_context,
