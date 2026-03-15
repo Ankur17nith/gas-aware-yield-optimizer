@@ -14,7 +14,12 @@ import uvicorn
 
 from config import settings
 from aggregator.fetch_pools import fetch_all_pools
-from aggregator.fetch_gas import get_gas_price, get_gas_history_summary
+from aggregator.fetch_gas import (
+    get_gas_price,
+    get_gas_history_summary,
+    get_supported_chains,
+    normalize_chain,
+)
 from aggregator.price_feeds import get_token_prices
 from aggregator.historical_data import get_historical_rates
 from engine.net_yield import compute_net_yields
@@ -61,7 +66,7 @@ async def _build_assistant_context(
     pool_limit: int = 15,
 ) -> dict:
     pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
+    gas_data = await get_gas_price(chain)
     price_data = await get_token_prices()
     net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
     ranked = rank_pools(net_yields)
@@ -124,10 +129,10 @@ async def _build_assistant_context(
             ],
         }
 
-    gas_timing = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data)
+    gas_timing = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data, chain=chain)
 
     return {
-        "chain": chain or "ethereum",
+        "chain": normalize_chain(chain),
         "amount": amount,
         "gas": {
             "safe": gas_data.get("safe"),
@@ -167,13 +172,15 @@ def _estimate_wait_time(current_gas: float, avg_gas: float, hourly_averages: lis
 def _build_gas_timing_payload(
     gas_data: dict,
     price_data: dict,
+    chain: str | None = None,
 ) -> dict:
+    chain_key = normalize_chain(chain or str(gas_data.get("chain") or "ethereum"))
     current_gas = float(gas_data.get("standard", 0) or 0)
     safe_gas = float(gas_data.get("safe", current_gas) or current_gas)
     fast_gas = float(gas_data.get("fast", current_gas) or current_gas)
     eth_price = float(((price_data.get("prices", {}).get("ETH", {}) or {}).get("price", 0)) or 0)
 
-    summary = get_gas_history_summary(hours=24)
+    summary = get_gas_history_summary(chain=chain_key, hours=24)
     samples = list(summary.get("samples", []) or [])
 
     # If service just started and history is sparse, bootstrap a realistic 5-minute trend
@@ -210,7 +217,10 @@ def _build_gas_timing_payload(
 
     trend = [
         {
-            "timestamp": int(entry.get("timestamp", 0) or 0),
+            "timestamp": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(int(entry.get("timestamp", 0) or 0)),
+            ),
             "gas": round(float(entry.get("gas_price", 0) or 0), 2),
         }
         for entry in samples[-288:]
@@ -224,11 +234,15 @@ def _build_gas_timing_payload(
         for point in trend
     ]
 
-    data_source = (
-        "Etherscan Gas Tracker"
-        if str(gas_data.get("source", "")).lower() == "etherscan"
-        else "Ethereum RPC"
-    )
+    source_key = str(gas_data.get("source", "")).lower()
+    if source_key == "etherscan":
+        data_source = "Etherscan Gas Tracker"
+    elif source_key == "polygon_gas_station":
+        data_source = "Polygon Gas Station"
+    elif source_key == "rpc":
+        data_source = f"{chain_key.title()} RPC"
+    else:
+        data_source = f"{chain_key.title()} Gas Fallback"
     last_updated = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
     return {
@@ -249,6 +263,7 @@ def _build_gas_timing_payload(
         "eth_price": round(eth_price, 2),
         "data_source": data_source,
         "last_updated": last_updated,
+        "chain": chain_key,
         "hourly_averages": summary.get("hourly_averages", []),
         "trend": trend,
         "history": history,
@@ -259,7 +274,7 @@ async def _gas_history_sampler() -> None:
     """Background task that captures gas snapshots every 5 minutes."""
     while True:
         try:
-            await get_gas_price()
+            await asyncio.gather(*(get_gas_price(chain) for chain in get_supported_chains()))
         except Exception as exc:
             logger.warning("Gas history sampler tick failed: %s", exc)
         await asyncio.sleep(300)
@@ -450,10 +465,10 @@ async def pools(chain: str | None = None):
 #  Gas Price
 # ──────────────────────────────────────────────
 @app.get("/gas")
-async def gas():
-    """Return current Ethereum gas price."""
+async def gas(chain: str | None = None):
+    """Return current gas price for the selected chain."""
     try:
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         return {
             **gas_data,
             "sources": {
@@ -466,12 +481,12 @@ async def gas():
 
 
 @app.get("/gas-timing")
-async def gas_timing():
+async def gas_timing(chain: str | None = None):
     """Return gas timing recommendation for migration windows."""
     try:
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
-        payload = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data)
+        payload = _build_gas_timing_payload(gas_data=gas_data, price_data=price_data, chain=chain)
         return payload
     except Exception as exc:
         logger.exception("/gas-timing failed")
@@ -540,7 +555,7 @@ async def net_yield(amount: float = 10000.0, chain: str | None = None):
     """Calculate net APY after gas costs for all pools."""
     try:
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
         results = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(results)
@@ -596,7 +611,7 @@ async def migration(
 ):
     """Get migration recommendation for a user's position."""
     pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
+    gas_data = await get_gas_price(chain)
     price_data = await get_token_prices()
     net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
     historical = await get_historical_rates(chain)
@@ -644,7 +659,7 @@ async def compare(
     """Return side-by-side pool comparison data ranked by net APY."""
     try:
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
         net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(net_yields)
@@ -695,7 +710,7 @@ async def auto_rebalance(
 ):
     """Return auto-rebalance recommendation based on APY delta and gas threshold."""
     pool_data = await fetch_all_pools(chain)
-    gas_data = await get_gas_price()
+    gas_data = await get_gas_price(chain)
     price_data = await get_token_prices()
     net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
     historical = await get_historical_rates(chain)
@@ -746,7 +761,7 @@ async def leaderboard(amount: float = 10000.0, limit: int = 10, chain: str | Non
     """Return top pools ranked by net APY."""
     try:
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
         results = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(results)
@@ -764,7 +779,7 @@ async def stats(chain: str | None = None):
     """Return aggregate platform stats."""
     try:
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         total_tvl = sum(float(p.get("tvl", 0) or 0) for p in pool_data)
         best_apy = max((float(p.get("apy", 0) or 0) for p in pool_data), default=0)
         protocols = len(set(p.get("protocol", "") for p in pool_data))
@@ -790,7 +805,7 @@ async def portfolio(amount: float = 10000.0, chain: str | None = None):
     """Simulate portfolio allocation across top pools."""
     try:
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
         results = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(results)
@@ -857,7 +872,7 @@ async def ai_chat(payload: AiChatRequest):
             for term in ["when should i migrate", "when to migrate", "why is gas high", "how much will gas cost", "gas timing"]
         ):
             # Explicitly source gas timing analysis from the dedicated endpoint flow.
-            assistant_context["gas_timing"] = await gas_timing()
+            assistant_context["gas_timing"] = await gas_timing(payload.chain)
 
         chat_payload = chat_with_gemini(
             user_message=payload.message,
@@ -928,7 +943,7 @@ async def ai_agent_strategy(
             return adk_response
 
         pool_data = await fetch_all_pools(chain)
-        gas_data = await get_gas_price()
+        gas_data = await get_gas_price(chain)
         price_data = await get_token_prices()
         net_yields = compute_net_yields(pool_data, gas_data, price_data, amount)
         ranked = rank_pools(net_yields)

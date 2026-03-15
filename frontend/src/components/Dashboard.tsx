@@ -506,6 +506,7 @@ export default function Dashboard() {
                 <GasTimingOptimizerCard
                   walletAddress={wallet.address || undefined}
                   targetPool={topPool?.pool_id || topPool?.pool_name || topPool?.protocol}
+                  chain={selectedChain}
                 />
               </div>
 

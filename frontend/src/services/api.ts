@@ -87,11 +87,12 @@ export interface GasTimingResponse {
   expected_savings: number;
   data_source?: string;
   last_updated?: string;
+  chain?: string;
   gas_used?: number;
   eth_price?: number;
   hourly_averages?: Array<{ hour: number; average_gas: number; count: number }>;
-  trend?: Array<{ timestamp: number; gas: number }>;
-  history?: Array<{ timestamp: number; gas_price: number }>;
+  trend?: Array<{ timestamp: string | number; gas: number }>;
+  history?: Array<{ timestamp: string | number; gas_price: number }>;
 }
 
 async function request<T>(endpoint: string, params?: Record<string, string>): Promise<T> {
@@ -202,10 +203,10 @@ export const api = {
     request<{ pools: any[]; sources?: Record<string, string> }>('/pools', chain ? { chain } : undefined),
 
   /** Fetch current gas prices */
-  getGas: () => request<any>('/gas'),
+  getGas: (chain?: string) => request<any>('/gas', chain ? { chain } : undefined),
 
   /** Fetch gas timing optimizer recommendation */
-  getGasTiming: () => request<GasTimingResponse>('/gas-timing'),
+  getGasTiming: (chain?: string) => request<GasTimingResponse>('/gas-timing', chain ? { chain } : undefined),
 
   /** Fetch token prices */
   getPrices: () => request<any>('/prices'),

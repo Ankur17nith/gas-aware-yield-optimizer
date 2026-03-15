@@ -13,9 +13,10 @@ import {
 interface Props {
   walletAddress?: string;
   targetPool?: string;
+  chain?: string;
 }
 
-export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Props) {
+export default function GasTimingOptimizerCard({ walletAddress, targetPool, chain }: Props) {
   const [data, setData] = useState<GasTimingResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [scheduling, setScheduling] = useState(false);
@@ -23,14 +24,14 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
 
   const fetchTiming = useCallback(async () => {
     try {
-      const response = await api.getGasTiming();
+      const response = await api.getGasTiming(chain);
       setData(response);
     } catch {
       setMessage('Could not load gas timing now.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [chain]);
 
   useEffect(() => {
     fetchTiming();
@@ -77,10 +78,20 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
     ? new Date(data.last_updated).toUTCString().replace('GMT', 'UTC')
     : 'Unavailable';
 
-  const chartData = history.slice(-288).map((h) => ({
-    time: new Date(h.timestamp * 1000).toISOString().slice(11, 16),
+  const formatToLocalHHMM = (timestamp: string | number): string => {
+    const date =
+      typeof timestamp === 'number'
+        ? new Date(timestamp * 1000)
+        : new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '--:--';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  const chartData = history.slice(-288).map((h: any) => ({
+    time: formatToLocalHHMM(h.timestamp),
     gas: Number(h.gas_price || 0),
   }));
+  const chainLabel = (data.chain || chain || 'ethereum').replace(/^./, (c) => c.toUpperCase());
 
   return (
     <section style={S.card}>
@@ -96,7 +107,7 @@ export default function GasTimingOptimizerCard({ walletAddress, targetPool }: Pr
       </div>
 
       <div style={S.grid}>
-        <Metric label="Current Gas" value={`${data.current_gas.toFixed(0)} gwei`} />
+        <Metric label={`Current Gas (${chainLabel})`} value={`${data.current_gas.toFixed(0)} gwei`} />
         <Metric label="24h Average" value={`${averageGas.toFixed(0)} gwei`} />
         <Metric label="Best Migration Time" value={`~${data.recommended_wait_time}`} />
         <Metric label="Expected Savings" value={`$${data.expected_savings.toFixed(2)}`} />
